@@ -1,0 +1,3382 @@
+---
+title: "DRIM Update"
+author: "Kamya Khandelwal"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    code_download: true
+    theme: journal  
+---
+
+```{r Knitting Parameters, include=FALSE}
+
+# Knitting Parameters
+
+  knitr::opts_chunk$set(
+    echo = TRUE,
+    warning = FALSE,
+    message = FALSE,
+    out.width = '100%',
+    fig.retina =3
+  )
+```
+
+
+
+```{r read, clean, merge data, warning=FALSE, message=FALSE, results='hide'}
+
+# Load libraries
+library(readxl)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(tidycensus)
+library(tidyverse)
+library(ggplot2)
+library(sf)
+library(tmap)
+library(tigris)
+library(ggthemes)
+library(purrr)
+library(scales)
+library(ggrepel)  # Helps prevent text overlap
+
+# Census API key from https://api.census.gov/data/key_signup.html
+census_api_key("7a0a7e8bbee07791cd0618b03c7374e384173a2e",overwrite=TRUE)
+
+# Invoke color palettes to be used
+palette <- c('#feedde', '#fdbe85', '#fd8d3c', '#e6550d', '#a63603')
+
+palettea <- c("#EA526F","#E76B74","#D7AF70","#937D64","#585B56")
+
+paletteb <- c("#f7b267", "#f79d65", "#f4845f", "#f27059", "#f25c54")
+
+palettec <- c("#fde725","#5ec962","#21918c","#3b528b","#440154")
+
+paletted <- c("#25CB10", "#5AB60C", "#8FA108", "#C48C04", "#FA7800")
+
+palettee <- c("#ffd700","#ffb14e","#ea5f94","#9d02d7","#0000ff")
+
+palettef <- c('#fdae61','#d7191c','#2c7bb6','#ffffbf','#abd9e9')
+
+paletteg <- c("#981FAC","#CB0F8B","#FF006A","#FE4C35","#FE9900")
+
+paletteh <- c("#981FAC","#FF006A","#FE4C35","#FE9900")
+
+palettei <- c("#981FAC","#FF006A")
+
+# Theme functions
+mapTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 15,colour = "black"),
+    plot.subtitle=element_text(face="italic"),
+    plot.caption=element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2),
+    strip.text.x = element_text(size = 14))
+}
+
+plotTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(color = "darkred", size=15, face="bold"),
+    plot.subtitle = element_text(face="italic"),
+    plot.caption = element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major = element_line("grey80", size = 0.1),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2),
+    strip.background = element_rect(fill = "grey80", color = "white"),
+    strip.text = element_text(size=12),
+    axis.title = element_text(size=12),
+    axis.text = element_text(size=10),
+    plot.background = element_blank(),
+    legend.background = element_blank(),
+    legend.title = element_text(colour = "black", face = "italic"),
+    legend.text = element_text(colour = "black", face = "italic"),
+    strip.text.x = element_text(size = 14)
+  )
+}
+
+```
+
+
+``` {r Base Data, message=FALSE, warning=FALSE, message=FALSE, results='hide'}
+
+# Load census data
+acs_2023 <- load_variables(year = 2023, dataset = "acs5", cache = TRUE) #this is 2023 5-year acs
+acs_2022 <- load_variables(year = 2022, dataset = "acs5", cache = TRUE) #this is 2022 5-year acs
+acs_2021 <- load_variables(year = 2021, dataset = "acs5", cache = TRUE) #this is 2021 5-year acs
+acs_2020 <- load_variables(year = 2020, dataset = "acs5", cache = TRUE) #this is 2020 5-year acs
+acs_2019 <- load_variables(year = 2019, dataset = "acs5", cache = TRUE) #this is 2019 5-year acs
+acs_2018 <- load_variables(year = 2018, dataset = "acs5", cache = TRUE) #this is 2018 5-year acs
+acs_2017 <- load_variables(year = 2017, dataset = "acs5", cache = TRUE) #this is 2017 5-year acs
+acs_2016 <- load_variables(year = 2016, dataset = "acs5", cache = TRUE) #this is 2016 5-year acs
+acs_2015 <- load_variables(year = 2015, dataset = "acs5", cache = TRUE) #this is 2015 5-year acs
+acs_2010 <- load_variables(year = 2010, dataset = "acs5", cache = TRUE) #this is 2010 5-year acs
+dc_2020 <- load_variables(2020, "pl", cache = TRUE) #this is 2020 decennial, p1 because only restricted data available for 2020 DC
+dc_2010 <- load_variables(2010, "pl", cache = TRUE) #this is 2010 decennial
+dc_2000 <- load_variables(2000, "pl", cache = TRUE) #this is 2000 decennial
+
+# Define ACS Variables for Newark Displacement & Gentrification Analysis
+vars_acs_2023 <- c(
+
+    # Business and Economy: Gentrification and displacement are often linked to economic shifts, such as rising business investments, self-employment trends, and industry transitions.
+    self_employed_incorporated = "B08128_004", # signals entrepreneurship growth
+    self_employed_not_incorporated = "B08128_009", # indicates local small business activity
+    employment_industry = "C24030_001", # tracks workforce composition
+    worker_class = "B24080_001", # private vs govt vs self-employed
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Education: Higher educational attainment in historically lower-income areas can indicate an influx of more affluent populations (a sign of gentrification).
+    bachelor_degree_or_higher = "B15003_022",
+    bachelor_male = "B15002_015",
+    masters_male = "B15002_016",
+    doctorate_male = "B15002_018",
+    bachelor_female = "B15002_032",
+    masters_female = "B15002_033",
+    doctorate_female = "B15002_035",
+    educational_attainment_total = "B15002_001", 
+    professional_degree_male = "B15002_017",
+    professional_degree_female = "B15002_034",
+    highschool_dropout = "B15003_002", # adults 25+ without high school diploma
+    
+    # Employment: Changes in employment types and income levels impact housing affordability and displacement risks.
+    total_labor_force = "B23025_002", # total workers or civilian labor force
+    total_employed = "B23025_004", # total employed population
+    total_unemployed = "B23025_005",
+    remote_workers = "B08006_017", # working from home (remote work trends)
+    median_hh_income = "B19013_001", # to track economic shifts
+    poverty_level = "B17001_002",
+    service_industry = "B24011_018", #This includes food service workers, janitors, security guards, and personal care aides who typically rely on affordable housing near their workplaces and may be displaced by rising rents.
+    mgmt_business_sc_arts_industry = "B24011_002", # job growth in professional, scientific, and technical services 
+    
+    # Families and living arrangements: Family structure impacts housing stability, and displacement disproportionately affects single-parent and low-income households.
+    total_households = "B11001_001",
+    family_households = "B11001_002",
+    nonfamily_households = "B11001_007",
+    households_with_children = "B11003_001",
+    
+    # Health (Limited ACS Data on Health, but Housing & Poverty Affect Health Outcomes)
+    disabled_population = "B18101_001",
+    family_without_health_insurance = "C27021_005",
+    nonfamily_without_health_insuracne = "C27021_015",
+    
+    # Housing: Housing affordability and instability are one of the strongest displacement indicators.
+    total_housing_units = "B25001_001",
+    median_gross_rent = "B25064_001",
+    median_home_value = "B25077_001",
+    rent_burden_30plus = "B25070_007",
+    rent_burden_50plus = "B25070_010",
+    owner_occupied_units = "B25003_002",
+    renter_occupied_units = "B25003_003",
+    rent_100_below = "B25063_003",
+    rent_100_149 = "B25063_004",
+    rent_150_199 = "B25063_005",
+    rent_200_249 = "B25063_006",
+    rent_250_299 = "B25063_007",
+    rent_300_349 = "B25063_008",
+    rent_350_399 = "B25063_009",
+    rent_400_449 = "B25063_010",
+    rent_450_499 = "B25063_011",
+    rent_500_549 = "B25063_012",
+    rent_550_599 = "B25063_013",
+    rent_600_649 = "B25063_014",
+    rent_650_699 = "B25063_015",
+    rent_700_749 = "B25063_016",
+    rent_750_799 = "B25063_017",
+    rent_800_899 = "B25063_018",
+    rent_900_999 = "B25063_019",
+    rent_1000_1249 = "B25063_020",
+    rent_1250_1499 = "B25063_021",
+    rent_1500_1999 = "B25063_022",
+    rent_2000_2499 = "B25063_023",
+    rent_2500_2999 = "B25063_024",
+    rent_3000_3499 = "B25063_025",
+    rent_3500_plus = "B25063_026",
+    total_occupied_units = "B25002_002",
+    total_vacant_units = "B25002_003",
+    units_built_2020plus = "B25034_002",
+    units_built_2010_2019 = "B25034_003",
+    units_built_2000_2009 = "B25034_004",
+    households_cash_rent = "B25063_002",
+    households_no_cash_rent = "B25063_027",
+    overcrowded_owner_occupied_households = "B25014_007", # Households experiencing severe overcrowding (2+ persons per room)
+    housing_before_1939 = "B25034_011", # Older units may indicate disinvestment, increasing gentrification potential
+    households_receiving_assistance = "B19058_002", #This variable provides the total number of households receiving either cash public assistance or Food Stamps/SNAP, making it useful for analyzing households benefiting from these programs.
+    no_internet_access = "B28002_013", # households with no internet access
+    
+    # Income and poverty: Income inequality shapes affordability and determines displacement risks.
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Population and people (migration and displacement indicators): Tracking population shifts can reveal where displacement is occurring.
+    total_population = "B01003_001",
+    total_male_population = "B01001_002",
+    total_female_population = "B01001_026",
+    median_age = "B01002_001",
+    male_median_age ="B01002_002",
+    female_median_age = "B01002_003",
+    recent_movers = "B07201_003", # households that moved into the City in last year, i.e. different house one year ago
+    foreign_born_population = "B05006_001", # new immigrants are often displaced first
+    
+    # Race and ethnicity: Tracking racial composition changes is key to identifying gentrification patterns.
+    white_NH_race = "B03002_003",
+    black_NH_race = "B03002_004",
+    asian_NH_race = "B03002_006",
+    hisp_race = "B03002_012",
+    
+    # Transportation and mobility: Rising transit use signals affordability shifts and changing commuting patterns.
+    public_transit_users = "B08134_061", 
+    mean_commute_time = "B08303_001",
+    no_vehicle_households = "B08201_002", 
+    commute_alone = "B08101_009"
+)
+
+# Set Year for Analysis
+year_selected <- 2023
+
+# Retrieve ACS Data at Tract Level for Essex County
+tract_data_2023 <- get_acs(
+  geography = "tract",  # Getting data at census tract level
+  state = 34, 
+  county = "013",  # Essex County
+  variables = vars_acs_2023,  # Your defined variables
+  year = year_selected,
+  survey = "acs5",
+  geometry = TRUE  # Keep spatial data for mapping
+)
+
+# Read the CSV file containing Newark census tracts
+newark_tracts <- read_csv("Newark_CT_Geographies_3807320187672480848.csv") 
+
+# Read the CSV file containing Newark neighborhoods 
+newark_nbd <- read_csv("Newark_Nbd_Geographies_449486632812707134.csv") 
+
+# The column with tract GEOIDs is named 'GEOID'
+newark_tract_geoids <- as.character(newark_tracts$GEOID)  
+
+# Filter the Essex County ACS data to keep only Newark tracts
+newark_tract_2023 <- tract_data_2023 %>%
+  filter(GEOID %in% newark_tract_geoids)
+
+# Check the filtered data
+head(newark_tract_2023)
+
+# Ensure Newark data is in sf format
+newark_tract_2023 <- newark_tract_2023 %>%
+  st_as_sf()
+
+# Convert Newark tract data from long to wide format
+newark_tract_wide_2023 <- newark_tract_2023 %>%
+  pivot_wider(
+    names_from = variable,    # Column names become variables
+    values_from = c(estimate, moe)  # Keep estimates and margin of error
+  )
+
+# Display Sample Data
+head(newark_tract_wide_2023)
+
+# Remove columns with "moe" in their names
+newark_tract_wide_2023 <- newark_tract_wide_2023 %>%
+  select(-contains("moe"))
+
+# Rename columns by replacing "estimate" with "2023"
+colnames(newark_tract_wide_2023) <- gsub("estimate", "2023", colnames(newark_tract_wide_2023))
+
+# Remove "; Essex County; New Jersey" from the NAME column
+newark_tract_wide_2023 <- newark_tract_wide_2023 %>%
+  mutate(NAME = str_replace(NAME, "; Essex County; New Jersey", ""))
+
+# Check cleaned dataset
+head(newark_tract_wide_2023)
+
+
+
+
+# ACS 2022 data
+
+vars_acs_2022 <- c(
+
+    # Business and Economy: Gentrification and displacement are often linked to economic shifts, such as rising business investments, self-employment trends, and industry transitions.
+    self_employed_incorporated = "B08128_004", # signals entrepreneurship growth
+    self_employed_not_incorporated = "B08128_009", # indicates local small business activity
+    employment_industry = "C24030_001", # tracks workforce composition
+    worker_class = "B24080_001", # private vs govt vs self-employed
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Education: Higher educational attainment in historically lower-income areas can indicate an influx of more affluent populations (a sign of gentrification).
+    bachelor_degree_or_higher = "B15003_022",
+    bachelor_male = "B15002_015",
+    masters_male = "B15002_016",
+    doctorate_male = "B15002_018",
+    bachelor_female = "B15002_032",
+    masters_female = "B15002_033",
+    doctorate_female = "B15002_035",
+    educational_attainment_total = "B15002_001", 
+    professional_degree_male = "B15002_017",
+    professional_degree_female = "B15002_034",
+    highschool_dropout = "B15003_002", # adults 25+ without high school diploma
+    
+    # Employment: Changes in employment types and income levels impact housing affordability and displacement risks.
+    total_labor_force = "B23025_002", # total workers or civilian labor force
+    total_employed = "B23025_004", # total employed population
+    total_unemployed = "B23025_005",
+    remote_workers = "B08006_017", # working from home (remote work trends)
+    median_hh_income = "B19013_001", # to track economic shifts
+    poverty_level = "B17001_002",
+    service_industry = "B24011_018", #This includes food service workers, janitors, security guards, and personal care aides who typically rely on affordable housing near their workplaces and may be displaced by rising rents.
+    mgmt_business_sc_arts_industry = "B24011_002", # job growth in professional, scientific, and technical services 
+    
+    # Families and living arrangements: Family structure impacts housing stability, and displacement disproportionately affects single-parent and low-income households.
+    total_households = "B11001_001",
+    family_households = "B11001_002",
+    nonfamily_households = "B11001_007",
+    households_with_children = "B11003_001",
+    
+    # Health (Limited ACS Data on Health, but Housing & Poverty Affect Health Outcomes)
+    disabled_population = "B18101_001",
+    family_without_health_insurance = "C27021_005",
+    nonfamily_without_health_insuracne = "C27021_015",
+    
+    # Housing: Housing affordability and instability are one of the strongest displacement indicators.
+    total_housing_units = "B25001_001",
+    median_gross_rent = "B25064_001",
+    median_home_value = "B25077_001",
+    rent_burden_30plus = "B25070_007",
+    rent_burden_50plus = "B25070_010",
+    owner_occupied_units = "B25003_002",
+    renter_occupied_units = "B25003_003",
+    rent_100_below = "B25063_003",
+    rent_100_149 = "B25063_004",
+    rent_150_199 = "B25063_005",
+    rent_200_249 = "B25063_006",
+    rent_250_299 = "B25063_007",
+    rent_300_349 = "B25063_008",
+    rent_350_399 = "B25063_009",
+    rent_400_449 = "B25063_010",
+    rent_450_499 = "B25063_011",
+    rent_500_549 = "B25063_012",
+    rent_550_599 = "B25063_013",
+    rent_600_649 = "B25063_014",
+    rent_650_699 = "B25063_015",
+    rent_700_749 = "B25063_016",
+    rent_750_799 = "B25063_017",
+    rent_800_899 = "B25063_018",
+    rent_900_999 = "B25063_019",
+    rent_1000_1249 = "B25063_020",
+    rent_1250_1499 = "B25063_021",
+    rent_1500_1999 = "B25063_022",
+    rent_2000_2499 = "B25063_023",
+    rent_2500_2999 = "B25063_024",
+    rent_3000_3499 = "B25063_025",
+    rent_3500_plus = "B25063_026",
+    total_occupied_units = "B25002_002",
+    total_vacant_units = "B25002_003",
+    units_built_2020plus = "B25034_002",
+    units_built_2010_2019 = "B25034_003",
+    units_built_2000_2009 = "B25034_004",
+    households_cash_rent = "B25063_002",
+    households_no_cash_rent = "B25063_027",
+    overcrowded_owner_occupied_households = "B25014_007", # Households experiencing severe overcrowding (2+ persons per room)
+    housing_before_1939 = "B25034_011", # Older units may indicate disinvestment, increasing gentrification potential
+    households_receiving_assistance = "B19058_002", #This variable provides the total number of households receiving either cash public assistance or Food Stamps/SNAP, making it useful for analyzing households benefiting from these programs.
+    no_internet_access = "B28002_013", # households with no internet access
+    
+    # Income and poverty: Income inequality shapes affordability and determines displacement risks.
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Population and people (migration and displacement indicators): Tracking population shifts can reveal where displacement is occurring.
+    total_population = "B01003_001",
+    total_male_population = "B01001_002",
+    total_female_population = "B01001_026",
+    median_age = "B01002_001",
+    male_median_age ="B01002_002",
+    female_median_age = "B01002_003",
+    recent_movers = "B07201_003", # households that moved into the City in last year, i.e. different house one year ago
+    foreign_born_population = "B05006_001", # new immigrants are often displaced first
+    
+    # Race and ethnicity: Tracking racial composition changes is key to identifying gentrification patterns.
+    white_NH_race = "B03002_003",
+    black_NH_race = "B03002_004",
+    asian_NH_race = "B03002_006",
+    hisp_race = "B03002_012",
+    
+    # Transportation and mobility: Rising transit use signals affordability shifts and changing commuting patterns.
+    public_transit_users = "B08134_061", 
+    mean_commute_time = "B08303_001",
+    no_vehicle_households = "B08201_002", 
+    commute_alone = "B08101_009"
+)
+
+# Set Year for Analysis
+year_selected <- 2022
+
+# Retrieve ACS Data at Tract Level for Essex County
+tract_data_2022 <- get_acs(
+  geography = "tract",  # Getting data at census tract level
+  state = 34, 
+  county = "013",  # Essex County
+  variables = vars_acs_2022,  # Your defined variables
+  year = year_selected,
+  survey = "acs5",
+  geometry = TRUE  # Keep spatial data for mapping
+)
+
+
+# Filter the Essex County ACS data to keep only Newark tracts
+newark_tract_2022 <- tract_data_2022 %>%
+  filter(GEOID %in% newark_tract_geoids)
+
+# Check the filtered data
+head(newark_tract_2022)
+
+# Ensure Newark data is in sf format
+newark_tract_2022 <- newark_tract_2022 %>%
+  st_as_sf()
+
+# Convert Newark tract data from long to wide format
+newark_tract_wide_2022 <- newark_tract_2022 %>%
+  pivot_wider(
+    names_from = variable,    # Column names become variables
+    values_from = c(estimate, moe)  # Keep estimates and margin of error
+  )
+
+# Display Sample Data
+head(newark_tract_wide_2022)
+
+# Remove columns with "moe" in their names
+newark_tract_wide_2022 <- newark_tract_wide_2022 %>%
+  select(-contains("moe"))
+
+# Rename columns by replacing "estimate" with "2022"
+colnames(newark_tract_wide_2022) <- gsub("estimate", "2022", colnames(newark_tract_wide_2022))
+
+# Remove "; Essex County; New Jersey" from the NAME column
+newark_tract_wide_2022 <- newark_tract_wide_2022 %>%
+  mutate(NAME = str_replace(NAME, "; Essex County; New Jersey", ""))
+
+# Check cleaned dataset
+head(newark_tract_wide_2022)
+
+
+
+
+# ACS 2021 data
+
+vars_acs_2021 <- c(
+
+    # Business and Economy: Gentrification and displacement are often linked to economic shifts, such as rising business investments, self-employment trends, and industry transitions.
+    self_employed_incorporated = "B08128_004", # signals entrepreneurship growth
+    self_employed_not_incorporated = "B08128_009", # indicates local small business activity
+    employment_industry = "C24030_001", # tracks workforce composition
+    worker_class = "B24080_001", # private vs govt vs self-employed
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Education: Higher educational attainment in historically lower-income areas can indicate an influx of more affluent populations (a sign of gentrification).
+    bachelor_degree_or_higher = "B15003_022",
+    bachelor_male = "B15002_015",
+    masters_male = "B15002_016",
+    doctorate_male = "B15002_018",
+    bachelor_female = "B15002_032",
+    masters_female = "B15002_033",
+    doctorate_female = "B15002_035",
+    educational_attainment_total = "B15002_001", 
+    professional_degree_male = "B15002_017",
+    professional_degree_female = "B15002_034",
+    highschool_dropout = "B15003_002", # adults 25+ without high school diploma
+    
+    # Employment: Changes in employment types and income levels impact housing affordability and displacement risks.
+    total_labor_force = "B23025_002", # total workers or civilian labor force
+    total_employed = "B23025_004", # total employed population
+    total_unemployed = "B23025_005",
+    remote_workers = "B08006_017", # working from home (remote work trends)
+    median_hh_income = "B19013_001", # to track economic shifts
+    poverty_level = "B17001_002",
+    service_industry = "B24011_018", #This includes food service workers, janitors, security guards, and personal care aides who typically rely on affordable housing near their workplaces and may be displaced by rising rents.
+    mgmt_business_sc_arts_industry = "B24011_002", # job growth in professional, scientific, and technical services 
+    
+    # Families and living arrangements: Family structure impacts housing stability, and displacement disproportionately affects single-parent and low-income households.
+    total_households = "B11001_001",
+    family_households = "B11001_002",
+    nonfamily_households = "B11001_007",
+    households_with_children = "B11003_001",
+    
+    # Health (Limited ACS Data on Health, but Housing & Poverty Affect Health Outcomes)
+    disabled_population = "B18101_001",
+    family_without_health_insurance = "C27021_005",
+    nonfamily_without_health_insuracne = "C27021_015",
+    
+    # Housing: Housing affordability and instability are one of the strongest displacement indicators.
+    total_housing_units = "B25001_001",
+    median_gross_rent = "B25064_001",
+    median_home_value = "B25077_001",
+    rent_burden_30plus = "B25070_007",
+    rent_burden_50plus = "B25070_010",
+    owner_occupied_units = "B25003_002",
+    renter_occupied_units = "B25003_003",
+    rent_100_below = "B25063_003",
+    rent_100_149 = "B25063_004",
+    rent_150_199 = "B25063_005",
+    rent_200_249 = "B25063_006",
+    rent_250_299 = "B25063_007",
+    rent_300_349 = "B25063_008",
+    rent_350_399 = "B25063_009",
+    rent_400_449 = "B25063_010",
+    rent_450_499 = "B25063_011",
+    rent_500_549 = "B25063_012",
+    rent_550_599 = "B25063_013",
+    rent_600_649 = "B25063_014",
+    rent_650_699 = "B25063_015",
+    rent_700_749 = "B25063_016",
+    rent_750_799 = "B25063_017",
+    rent_800_899 = "B25063_018",
+    rent_900_999 = "B25063_019",
+    rent_1000_1249 = "B25063_020",
+    rent_1250_1499 = "B25063_021",
+    rent_1500_1999 = "B25063_022",
+    rent_2000_2499 = "B25063_023",
+    rent_2500_2999 = "B25063_024",
+    rent_3000_3499 = "B25063_025",
+    rent_3500_plus = "B25063_026",
+    total_occupied_units = "B25002_002",
+    total_vacant_units = "B25002_003",
+    units_built_2020plus = "B25034_002",
+    units_built_2010_2019 = "B25034_003",
+    units_built_2000_2009 = "B25034_004",
+    households_cash_rent = "B25063_002",
+    households_no_cash_rent = "B25063_027",
+    overcrowded_owner_occupied_households = "B25014_007", # Households experiencing severe overcrowding (2+ persons per room)
+    housing_before_1939 = "B25034_011", # Older units may indicate disinvestment, increasing gentrification potential
+    households_receiving_assistance = "B19058_002", #This variable provides the total number of households receiving either cash public assistance or Food Stamps/SNAP, making it useful for analyzing households benefiting from these programs.
+    no_internet_access = "B28002_013", # households with no internet access
+    
+    # Income and poverty: Income inequality shapes affordability and determines displacement risks.
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Population and people (migration and displacement indicators): Tracking population shifts can reveal where displacement is occurring.
+    total_population = "B01003_001",
+    total_male_population = "B01001_002",
+    total_female_population = "B01001_026",
+    median_age = "B01002_001",
+    male_median_age ="B01002_002",
+    female_median_age = "B01002_003",
+    recent_movers = "B07201_003", # households that moved into the City in last year, i.e. different house one year ago
+    foreign_born_population = "B05006_001", # new immigrants are often displaced first
+    
+    # Race and ethnicity: Tracking racial composition changes is key to identifying gentrification patterns.
+    white_NH_race = "B03002_003",
+    black_NH_race = "B03002_004",
+    asian_NH_race = "B03002_006",
+    hisp_race = "B03002_012",
+    
+    # Transportation and mobility: Rising transit use signals affordability shifts and changing commuting patterns.
+    public_transit_users = "B08134_061", 
+    mean_commute_time = "B08303_001",
+    no_vehicle_households = "B08201_002", 
+    commute_alone = "B08101_009"
+)
+
+# Set Year for Analysis
+year_selected <- 2021
+
+# Retrieve ACS Data at Tract Level for Essex County
+tract_data_2021 <- get_acs(
+  geography = "tract",  # Getting data at census tract level
+  state = 34, 
+  county = "013",  # Essex County
+  variables = vars_acs_2021,  # Your defined variables
+  year = year_selected,
+  survey = "acs5",
+  geometry = TRUE  # Keep spatial data for mapping
+)
+
+
+# Filter the Essex County ACS data to keep only Newark tracts
+newark_tract_2021 <- tract_data_2021 %>%
+  filter(GEOID %in% newark_tract_geoids)
+
+# Check the filtered data
+head(newark_tract_2021)
+
+# Ensure Newark data is in sf format
+newark_tract_2021 <- newark_tract_2021 %>%
+  st_as_sf()
+
+# Convert Newark tract data from long to wide format
+newark_tract_wide_2021 <- newark_tract_2021 %>%
+  pivot_wider(
+    names_from = variable,    # Column names become variables
+    values_from = c(estimate, moe)  # Keep estimates and margin of error
+  )
+
+# Display Sample Data
+head(newark_tract_wide_2021)
+
+# Remove columns with "moe" in their names
+newark_tract_wide_2021 <- newark_tract_wide_2021 %>%
+  select(-contains("moe"))
+
+# Rename columns by replacing "estimate" with "2021"
+colnames(newark_tract_wide_2021) <- gsub("estimate", "2021", colnames(newark_tract_wide_2021))
+
+# Remove ", Essex County, New Jersey" from the NAME column
+newark_tract_wide_2021 <- newark_tract_wide_2021 %>%
+  mutate(NAME = str_replace(NAME, ", Essex County, New Jersey", ""))
+
+# Check cleaned dataset
+head(newark_tract_wide_2021)
+
+
+
+# ACS 2020 data
+
+vars_acs_2020 <- c(
+
+    # Business and Economy: Gentrification and displacement are often linked to economic shifts, such as rising business investments, self-employment trends, and industry transitions.
+    self_employed_incorporated = "B08128_004", # signals entrepreneurship growth
+    self_employed_not_incorporated = "B08128_009", # indicates local small business activity
+    employment_industry = "C24030_001", # tracks workforce composition
+    worker_class = "B24080_001", # private vs govt vs self-employed
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Education: Higher educational attainment in historically lower-income areas can indicate an influx of more affluent populations (a sign of gentrification).
+    bachelor_degree_or_higher = "B15003_022",
+    bachelor_male = "B15002_015",
+    masters_male = "B15002_016",
+    doctorate_male = "B15002_018",
+    bachelor_female = "B15002_032",
+    masters_female = "B15002_033",
+    doctorate_female = "B15002_035",
+    educational_attainment_total = "B15002_001", 
+    professional_degree_male = "B15002_017",
+    professional_degree_female = "B15002_034",
+    highschool_dropout = "B15003_002", # adults 25+ without high school diploma
+    
+    # Employment: Changes in employment types and income levels impact housing affordability and displacement risks.
+    total_labor_force = "B23025_002", # total workers or civilian labor force
+    total_employed = "B23025_004", # total employed population
+    total_unemployed = "B23025_005",
+    remote_workers = "B08006_017", # working from home (remote work trends)
+    median_hh_income = "B19013_001", # to track economic shifts
+    poverty_level = "B17001_002",
+    service_industry = "B24011_018", #This includes food service workers, janitors, security guards, and personal care aides who typically rely on affordable housing near their workplaces and may be displaced by rising rents.
+    mgmt_business_sc_arts_industry = "B24011_002", # job growth in professional, scientific, and technical services 
+    
+    # Families and living arrangements: Family structure impacts housing stability, and displacement disproportionately affects single-parent and low-income households.
+    total_households = "B11001_001",
+    family_households = "B11001_002",
+    nonfamily_households = "B11001_007",
+    households_with_children = "B11003_001",
+    
+    # Health (Limited ACS Data on Health, but Housing & Poverty Affect Health Outcomes)
+    disabled_population = "B18101_001",
+    family_without_health_insurance = "C27021_005",
+    nonfamily_without_health_insuracne = "C27021_015",
+    
+    # Housing: Housing affordability and instability are one of the strongest displacement indicators.
+    total_housing_units = "B25001_001",
+    median_gross_rent = "B25064_001",
+    median_home_value = "B25077_001",
+    rent_burden_30plus = "B25070_007",
+    rent_burden_50plus = "B25070_010",
+    owner_occupied_units = "B25003_002",
+    renter_occupied_units = "B25003_003",
+    rent_100_below = "B25063_003",
+    rent_100_149 = "B25063_004",
+    rent_150_199 = "B25063_005",
+    rent_200_249 = "B25063_006",
+    rent_250_299 = "B25063_007",
+    rent_300_349 = "B25063_008",
+    rent_350_399 = "B25063_009",
+    rent_400_449 = "B25063_010",
+    rent_450_499 = "B25063_011",
+    rent_500_549 = "B25063_012",
+    rent_550_599 = "B25063_013",
+    rent_600_649 = "B25063_014",
+    rent_650_699 = "B25063_015",
+    rent_700_749 = "B25063_016",
+    rent_750_799 = "B25063_017",
+    rent_800_899 = "B25063_018",
+    rent_900_999 = "B25063_019",
+    rent_1000_1249 = "B25063_020",
+    rent_1250_1499 = "B25063_021",
+    rent_1500_1999 = "B25063_022",
+    rent_2000_2499 = "B25063_023",
+    rent_2500_2999 = "B25063_024",
+    rent_3000_3499 = "B25063_025",
+    rent_3500_plus = "B25063_026",
+    total_occupied_units = "B25002_002",
+    total_vacant_units = "B25002_003",
+    units_built_2020plus = "B25034_002",
+    units_built_2010_2019 = "B25034_003",
+    units_built_2000_2009 = "B25034_004",
+    households_cash_rent = "B25063_002",
+    households_no_cash_rent = "B25063_027",
+    overcrowded_owner_occupied_households = "B25014_007", # Households experiencing severe overcrowding (2+ persons per room)
+    housing_before_1939 = "B25034_011", # Older units may indicate disinvestment, increasing gentrification potential
+    households_receiving_assistance = "B19058_002", #This variable provides the total number of households receiving either cash public assistance or Food Stamps/SNAP, making it useful for analyzing households benefiting from these programs.
+    no_internet_access = "B28002_013", # households with no internet access
+    
+    # Income and poverty: Income inequality shapes affordability and determines displacement risks.
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Population and people (migration and displacement indicators): Tracking population shifts can reveal where displacement is occurring.
+    total_population = "B01003_001",
+    total_male_population = "B01001_002",
+    total_female_population = "B01001_026",
+    median_age = "B01002_001",
+    male_median_age ="B01002_002",
+    female_median_age = "B01002_003",
+    recent_movers = "B07201_003", # households that moved into the City in last year, i.e. different house one year ago
+    foreign_born_population = "B05006_001", # new immigrants are often displaced first
+    
+    # Race and ethnicity: Tracking racial composition changes is key to identifying gentrification patterns.
+    white_NH_race = "B03002_003",
+    black_NH_race = "B03002_004",
+    asian_NH_race = "B03002_006",
+    hisp_race = "B03002_012",
+    
+    # Transportation and mobility: Rising transit use signals affordability shifts and changing commuting patterns.
+    public_transit_users = "B08134_061", 
+    mean_commute_time = "B08303_001",
+    no_vehicle_households = "B08201_002", 
+    commute_alone = "B08101_009"
+)
+
+# Set Year for Analysis
+year_selected <- 2020
+
+# Retrieve ACS Data at Tract Level for Essex County
+tract_data_2020 <- get_acs(
+  geography = "tract",  # Getting data at census tract level
+  state = 34, 
+  county = "013",  # Essex County
+  variables = vars_acs_2020,  # Your defined variables
+  year = year_selected,
+  survey = "acs5",
+  geometry = TRUE  # Keep spatial data for mapping
+)
+
+
+# Filter the Essex County ACS data to keep only Newark tracts
+newark_tract_2020 <- tract_data_2020 %>%
+  filter(GEOID %in% newark_tract_geoids)
+
+# Check the filtered data
+head(newark_tract_2020)
+
+# Ensure Newark data is in sf format
+newark_tract_2020 <- newark_tract_2020 %>%
+  st_as_sf()
+
+# Convert Newark tract data from long to wide format
+newark_tract_wide_2020 <- newark_tract_2020 %>%
+  pivot_wider(
+    names_from = variable,    # Column names become variables
+    values_from = c(estimate, moe)  # Keep estimates and margin of error
+  )
+
+# Display Sample Data
+head(newark_tract_wide_2020)
+
+# Remove columns with "moe" in their names
+newark_tract_wide_2020 <- newark_tract_wide_2020 %>%
+  select(-contains("moe"))
+
+# Rename columns by replacing "estimate" with "2020"
+colnames(newark_tract_wide_2020) <- gsub("estimate", "2020", colnames(newark_tract_wide_2020))
+
+# Remove ", Essex County, New Jersey" from the NAME column
+newark_tract_wide_2020 <- newark_tract_wide_2020 %>%
+  mutate(NAME = str_replace(NAME, ", Essex County, New Jersey", ""))
+
+# Check cleaned dataset
+head(newark_tract_wide_2020)
+
+
+
+
+# ACS 2019 data
+
+vars_acs_2019 <- c(
+
+    # Business and Economy: Gentrification and displacement are often linked to economic shifts, such as rising business investments, self-employment trends, and industry transitions.
+    self_employed_incorporated = "B08128_004", # signals entrepreneurship growth
+    self_employed_not_incorporated = "B08128_009", # indicates local small business activity
+    employment_industry = "C24030_001", # tracks workforce composition
+    worker_class = "B24080_001", # private vs govt vs self-employed
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Education: Higher educational attainment in historically lower-income areas can indicate an influx of more affluent populations (a sign of gentrification).
+    bachelor_degree_or_higher = "B15003_022",
+    bachelor_male = "B15002_015",
+    masters_male = "B15002_016",
+    doctorate_male = "B15002_018",
+    bachelor_female = "B15002_032",
+    masters_female = "B15002_033",
+    doctorate_female = "B15002_035",
+    educational_attainment_total = "B15002_001", 
+    professional_degree_male = "B15002_017",
+    professional_degree_female = "B15002_034",
+    highschool_dropout = "B15003_002", # adults 25+ without high school diploma
+    
+    # Employment: Changes in employment types and income levels impact housing affordability and displacement risks.
+    total_labor_force = "B23025_002", # total workers or civilian labor force
+    total_employed = "B23025_004", # total employed population
+    total_unemployed = "B23025_005",
+    remote_workers = "B08006_017", # working from home (remote work trends)
+    median_hh_income = "B19013_001", # to track economic shifts
+    poverty_level = "B17001_002",
+    service_industry = "B24011_018", #This includes food service workers, janitors, security guards, and personal care aides who typically rely on affordable housing near their workplaces and may be displaced by rising rents.
+    mgmt_business_sc_arts_industry = "B24011_002", # job growth in professional, scientific, and technical services 
+    
+    # Families and living arrangements: Family structure impacts housing stability, and displacement disproportionately affects single-parent and low-income households.
+    total_households = "B11001_001",
+    family_households = "B11001_002",
+    nonfamily_households = "B11001_007",
+    households_with_children = "B11003_001",
+    
+    # Health (Limited ACS Data on Health, but Housing & Poverty Affect Health Outcomes)
+    disabled_population = "B18101_001",
+    family_without_health_insurance = "C27021_005",
+    nonfamily_without_health_insuracne = "C27021_015",
+    
+    # Housing: Housing affordability and instability are one of the strongest displacement indicators.
+    total_housing_units = "B25001_001",
+    median_gross_rent = "B25064_001",
+    median_home_value = "B25077_001",
+    rent_burden_30plus = "B25070_007",
+    rent_burden_50plus = "B25070_010",
+    owner_occupied_units = "B25003_002",
+    renter_occupied_units = "B25003_003",
+    rent_100_below = "B25063_003",
+    rent_100_149 = "B25063_004",
+    rent_150_199 = "B25063_005",
+    rent_200_249 = "B25063_006",
+    rent_250_299 = "B25063_007",
+    rent_300_349 = "B25063_008",
+    rent_350_399 = "B25063_009",
+    rent_400_449 = "B25063_010",
+    rent_450_499 = "B25063_011",
+    rent_500_549 = "B25063_012",
+    rent_550_599 = "B25063_013",
+    rent_600_649 = "B25063_014",
+    rent_650_699 = "B25063_015",
+    rent_700_749 = "B25063_016",
+    rent_750_799 = "B25063_017",
+    rent_800_899 = "B25063_018",
+    rent_900_999 = "B25063_019",
+    rent_1000_1249 = "B25063_020",
+    rent_1250_1499 = "B25063_021",
+    rent_1500_1999 = "B25063_022",
+    rent_2000_2499 = "B25063_023",
+    rent_2500_2999 = "B25063_024",
+    rent_3000_3499 = "B25063_025",
+    rent_3500_plus = "B25063_026",
+    total_occupied_units = "B25002_002",
+    total_vacant_units = "B25002_003",
+    units_built_2020plus = "B25034_002",
+    units_built_2010_2019 = "B25034_003",
+    units_built_2000_2009 = "B25034_004",
+    households_cash_rent = "B25063_002",
+    households_no_cash_rent = "B25063_027",
+    overcrowded_owner_occupied_households = "B25014_007", # Households experiencing severe overcrowding (2+ persons per room)
+    housing_before_1939 = "B25034_011", # Older units may indicate disinvestment, increasing gentrification potential
+    households_receiving_assistance = "B19058_002", #This variable provides the total number of households receiving either cash public assistance or Food Stamps/SNAP, making it useful for analyzing households benefiting from these programs.
+    no_internet_access = "B28002_013", # households with no internet access
+    
+    # Income and poverty: Income inequality shapes affordability and determines displacement risks.
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Population and people (migration and displacement indicators): Tracking population shifts can reveal where displacement is occurring.
+    total_population = "B01003_001",
+    total_male_population = "B01001_002",
+    total_female_population = "B01001_026",
+    median_age = "B01002_001",
+    male_median_age ="B01002_002",
+    female_median_age = "B01002_003",
+    recent_movers = "B07201_003", # households that moved into the City in last year, i.e. different house one year ago
+    foreign_born_population = "B05006_001", # new immigrants are often displaced first
+    
+    # Race and ethnicity: Tracking racial composition changes is key to identifying gentrification patterns.
+    white_NH_race = "B03002_003",
+    black_NH_race = "B03002_004",
+    asian_NH_race = "B03002_006",
+    hisp_race = "B03002_012",
+    
+    # Transportation and mobility: Rising transit use signals affordability shifts and changing commuting patterns.
+    public_transit_users = "B08134_061", 
+    mean_commute_time = "B08303_001",
+    no_vehicle_households = "B08201_002", 
+    commute_alone = "B08101_009"
+)
+
+# Set Year for Analysis
+year_selected <- 2019
+
+# Retrieve ACS Data at Tract Level for Essex County
+tract_data_2019 <- get_acs(
+  geography = "tract",  # Getting data at census tract level
+  state = 34, 
+  county = "013",  # Essex County
+  variables = vars_acs_2019,  # Your defined variables
+  year = year_selected,
+  survey = "acs5",
+  geometry = TRUE  # Keep spatial data for mapping
+)
+
+# Filter the Essex County ACS data to keep only Newark tracts
+newark_tract_2019 <- tract_data_2019 %>%
+  filter(GEOID %in% newark_tract_geoids)
+
+# Check the filtered data
+head(newark_tract_2019)
+
+# Ensure Newark data is in sf format
+newark_tract_2019 <- newark_tract_2019 %>%
+  st_as_sf()
+
+# Convert Newark tract data from long to wide format
+newark_tract_wide_2019 <- newark_tract_2019 %>%
+  pivot_wider(
+    names_from = variable,    # Column names become variables
+    values_from = c(estimate, moe)  # Keep estimates and margin of error
+  )
+
+# Display Sample Data
+head(newark_tract_wide_2019)
+
+# Remove columns with "moe" in their names
+newark_tract_wide_2019 <- newark_tract_wide_2019 %>%
+  select(-contains("moe"))
+
+# Rename columns by replacing "estimate" with "2019"
+colnames(newark_tract_wide_2019) <- gsub("estimate", "2019", colnames(newark_tract_wide_2019))
+
+# Remove ", Essex County, New Jersey" from the NAME column
+newark_tract_wide_2019 <- newark_tract_wide_2019 %>%
+  mutate(NAME = str_replace(NAME, ", Essex County, New Jersey", ""))
+
+# Check cleaned dataset
+head(newark_tract_wide_2019)
+
+
+
+
+# ACS 2018 data
+
+vars_acs_2018 <- c(
+
+    # Business and Economy: Gentrification and displacement are often linked to economic shifts, such as rising business investments, self-employment trends, and industry transitions.
+    self_employed_incorporated = "B08128_004", # signals entrepreneurship growth
+    self_employed_not_incorporated = "B08128_009", # indicates local small business activity
+    employment_industry = "C24030_001", # tracks workforce composition
+    worker_class = "B24080_001", # private vs govt vs self-employed
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Education: Higher educational attainment in historically lower-income areas can indicate an influx of more affluent populations (a sign of gentrification).
+    bachelor_degree_or_higher = "B15003_022",
+    bachelor_male = "B15002_015",
+    masters_male = "B15002_016",
+    doctorate_male = "B15002_018",
+    bachelor_female = "B15002_032",
+    masters_female = "B15002_033",
+    doctorate_female = "B15002_035",
+    educational_attainment_total = "B15002_001", 
+    professional_degree_male = "B15002_017",
+    professional_degree_female = "B15002_034",
+    highschool_dropout = "B15003_002", # adults 25+ without high school diploma
+    
+    # Employment: Changes in employment types and income levels impact housing affordability and displacement risks.
+    total_labor_force = "B23025_002", # total workers or civilian labor force
+    total_employed = "B23025_004", # total employed population
+    total_unemployed = "B23025_005",
+    remote_workers = "B08006_017", # working from home (remote work trends)
+    median_hh_income = "B19013_001", # to track economic shifts
+    poverty_level = "B17001_002",
+    service_industry = "B24011_018", #This includes food service workers, janitors, security guards, and personal care aides who typically rely on affordable housing near their workplaces and may be displaced by rising rents.
+    mgmt_business_sc_arts_industry = "B24011_002", # job growth in professional, scientific, and technical services 
+    
+    # Families and living arrangements: Family structure impacts housing stability, and displacement disproportionately affects single-parent and low-income households.
+    total_households = "B11001_001",
+    family_households = "B11001_002",
+    nonfamily_households = "B11001_007",
+    households_with_children = "B11003_001",
+    
+    # Health (Limited ACS Data on Health, but Housing & Poverty Affect Health Outcomes)
+    disabled_population = "B18101_001",
+    family_without_health_insurance = "C27021_005",
+    nonfamily_without_health_insuracne = "C27021_015",
+    
+    # Housing: Housing affordability and instability are one of the strongest displacement indicators.
+    total_housing_units = "B25001_001",
+    median_gross_rent = "B25064_001",
+    median_home_value = "B25077_001",
+    rent_burden_30plus = "B25070_007",
+    rent_burden_50plus = "B25070_010",
+    owner_occupied_units = "B25003_002",
+    renter_occupied_units = "B25003_003",
+    rent_100_below = "B25063_003",
+    rent_100_149 = "B25063_004",
+    rent_150_199 = "B25063_005",
+    rent_200_249 = "B25063_006",
+    rent_250_299 = "B25063_007",
+    rent_300_349 = "B25063_008",
+    rent_350_399 = "B25063_009",
+    rent_400_449 = "B25063_010",
+    rent_450_499 = "B25063_011",
+    rent_500_549 = "B25063_012",
+    rent_550_599 = "B25063_013",
+    rent_600_649 = "B25063_014",
+    rent_650_699 = "B25063_015",
+    rent_700_749 = "B25063_016",
+    rent_750_799 = "B25063_017",
+    rent_800_899 = "B25063_018",
+    rent_900_999 = "B25063_019",
+    rent_1000_1249 = "B25063_020",
+    rent_1250_1499 = "B25063_021",
+    rent_1500_1999 = "B25063_022",
+    rent_2000_2499 = "B25063_023",
+    rent_2500_2999 = "B25063_024",
+    rent_3000_3499 = "B25063_025",
+    rent_3500_plus = "B25063_026",
+    total_occupied_units = "B25002_002",
+    total_vacant_units = "B25002_003",
+    units_built_2020plus = "B25034_002",
+    units_built_2010_2019 = "B25034_003",
+    units_built_2000_2009 = "B25034_004",
+    households_cash_rent = "B25063_002",
+    households_no_cash_rent = "B25063_027",
+    overcrowded_owner_occupied_households = "B25014_007", # Households experiencing severe overcrowding (2+ persons per room)
+    housing_before_1939 = "B25034_011", # Older units may indicate disinvestment, increasing gentrification potential
+    households_receiving_assistance = "B19058_002", #This variable provides the total number of households receiving either cash public assistance or Food Stamps/SNAP, making it useful for analyzing households benefiting from these programs.
+    no_internet_access = "B28002_013", # households with no internet access
+    
+    # Income and poverty: Income inequality shapes affordability and determines displacement risks.
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Population and people (migration and displacement indicators): Tracking population shifts can reveal where displacement is occurring.
+    total_population = "B01003_001",
+    total_male_population = "B01001_002",
+    total_female_population = "B01001_026",
+    median_age = "B01002_001",
+    male_median_age ="B01002_002",
+    female_median_age = "B01002_003",
+    recent_movers = "B07201_003", # households that moved into the City in last year, i.e. different house one year ago
+    foreign_born_population = "B05006_001", # new immigrants are often displaced first
+    
+    # Race and ethnicity: Tracking racial composition changes is key to identifying gentrification patterns.
+    white_NH_race = "B03002_003",
+    black_NH_race = "B03002_004",
+    asian_NH_race = "B03002_006",
+    hisp_race = "B03002_012",
+    
+    # Transportation and mobility: Rising transit use signals affordability shifts and changing commuting patterns.
+    public_transit_users = "B08134_061", 
+    mean_commute_time = "B08303_001",
+    no_vehicle_households = "B08201_002", 
+    commute_alone = "B08101_009"
+)
+
+# Set Year for Analysis
+year_selected <- 2018
+
+# Retrieve ACS Data at Tract Level for Essex County
+tract_data_2018 <- get_acs(
+  geography = "tract",  # Getting data at census tract level
+  state = 34, 
+  county = "013",  # Essex County
+  variables = vars_acs_2018,  # Your defined variables
+  year = year_selected,
+  survey = "acs5",
+  geometry = TRUE  # Keep spatial data for mapping
+)
+
+# Filter the Essex County ACS data to keep only Newark tracts
+newark_tract_2018 <- tract_data_2018 %>%
+  filter(GEOID %in% newark_tract_geoids)
+
+# Check the filtered data
+head(newark_tract_2018)
+
+# Ensure Newark data is in sf format
+newark_tract_2018 <- newark_tract_2018 %>%
+  st_as_sf()
+
+# Convert Newark tract data from long to wide format
+newark_tract_wide_2018 <- newark_tract_2018 %>%
+  pivot_wider(
+    names_from = variable,    # Column names become variables
+    values_from = c(estimate, moe)  # Keep estimates and margin of error
+  )
+
+# Display Sample Data
+head(newark_tract_wide_2018)
+
+# Remove columns with "moe" in their names
+newark_tract_wide_2018 <- newark_tract_wide_2018 %>%
+  select(-contains("moe"))
+
+# Rename columns by replacing "estimate" with "2018"
+colnames(newark_tract_wide_2018) <- gsub("estimate", "2018", colnames(newark_tract_wide_2018))
+
+# Remove ", Essex County, New Jersey" from the NAME column
+newark_tract_wide_2018 <- newark_tract_wide_2018 %>%
+  mutate(NAME = str_replace(NAME, ", Essex County, New Jersey", ""))
+
+# Check cleaned dataset
+head(newark_tract_wide_2018)
+
+
+
+
+
+
+# ACS 2017 data
+
+vars_acs_2017 <- c(
+
+    # Business and Economy: Gentrification and displacement are often linked to economic shifts, such as rising business investments, self-employment trends, and industry transitions.
+    self_employed_incorporated = "B08128_004", # signals entrepreneurship growth
+    self_employed_not_incorporated = "B08128_009", # indicates local small business activity
+    employment_industry = "C24030_001", # tracks workforce composition
+    worker_class = "B24080_001", # private vs govt vs self-employed
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Education: Higher educational attainment in historically lower-income areas can indicate an influx of more affluent populations (a sign of gentrification).
+    bachelor_degree_or_higher = "B15003_022",
+    bachelor_male = "B15002_015",
+    masters_male = "B15002_016",
+    doctorate_male = "B15002_018",
+    bachelor_female = "B15002_032",
+    masters_female = "B15002_033",
+    doctorate_female = "B15002_035",
+    educational_attainment_total = "B15002_001", 
+    professional_degree_male = "B15002_017",
+    professional_degree_female = "B15002_034",
+    highschool_dropout = "B15003_002", # adults 25+ without high school diploma
+    
+    # Employment: Changes in employment types and income levels impact housing affordability and displacement risks.
+    total_labor_force = "B23025_002", # total workers or civilian labor force
+    total_employed = "B23025_004", # total employed population
+    total_unemployed = "B23025_005",
+    remote_workers = "B08006_017", # working from home (remote work trends)
+    median_hh_income = "B19013_001", # to track economic shifts
+    poverty_level = "B17001_002",
+    service_industry = "B24011_018", #This includes food service workers, janitors, security guards, and personal care aides who typically rely on affordable housing near their workplaces and may be displaced by rising rents.
+    mgmt_business_sc_arts_industry = "B24011_002", # job growth in professional, scientific, and technical services 
+    
+    # Families and living arrangements: Family structure impacts housing stability, and displacement disproportionately affects single-parent and low-income households.
+    total_households = "B11001_001",
+    family_households = "B11001_002",
+    nonfamily_households = "B11001_007",
+    households_with_children = "B11003_001",
+    
+    # Health (Limited ACS Data on Health, but Housing & Poverty Affect Health Outcomes)
+    disabled_population = "B18101_001",
+    family_without_health_insurance = "C27021_005",
+    nonfamily_without_health_insuracne = "C27021_015",
+    
+    # Housing: Housing affordability and instability are one of the strongest displacement indicators.
+    total_housing_units = "B25001_001",
+    median_gross_rent = "B25064_001",
+    median_home_value = "B25077_001",
+    rent_burden_30plus = "B25070_007",
+    rent_burden_50plus = "B25070_010",
+    owner_occupied_units = "B25003_002",
+    renter_occupied_units = "B25003_003",
+    rent_100_below = "B25063_003",
+    rent_100_149 = "B25063_004",
+    rent_150_199 = "B25063_005",
+    rent_200_249 = "B25063_006",
+    rent_250_299 = "B25063_007",
+    rent_300_349 = "B25063_008",
+    rent_350_399 = "B25063_009",
+    rent_400_449 = "B25063_010",
+    rent_450_499 = "B25063_011",
+    rent_500_549 = "B25063_012",
+    rent_550_599 = "B25063_013",
+    rent_600_649 = "B25063_014",
+    rent_650_699 = "B25063_015",
+    rent_700_749 = "B25063_016",
+    rent_750_799 = "B25063_017",
+    rent_800_899 = "B25063_018",
+    rent_900_999 = "B25063_019",
+    rent_1000_1249 = "B25063_020",
+    rent_1250_1499 = "B25063_021",
+    rent_1500_1999 = "B25063_022",
+    rent_2000_2499 = "B25063_023",
+    rent_2500_2999 = "B25063_024",
+    rent_3000_3499 = "B25063_025",
+    rent_3500_plus = "B25063_026",
+    total_occupied_units = "B25002_002",
+    total_vacant_units = "B25002_003",
+    units_built_2020plus = "B25034_002",
+    units_built_2010_2019 = "B25034_003",
+    units_built_2000_2009 = "B25034_004",
+    households_cash_rent = "B25063_002",
+    households_no_cash_rent = "B25063_027",
+    overcrowded_owner_occupied_households = "B25014_007", # Households experiencing severe overcrowding (2+ persons per room)
+    housing_before_1939 = "B25034_011", # Older units may indicate disinvestment, increasing gentrification potential
+    households_receiving_assistance = "B19058_002", #This variable provides the total number of households receiving either cash public assistance or Food Stamps/SNAP, making it useful for analyzing households benefiting from these programs.
+    no_internet_access = "B28002_013", # households with no internet access
+    
+    # Income and poverty: Income inequality shapes affordability and determines displacement risks.
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Population and people (migration and displacement indicators): Tracking population shifts can reveal where displacement is occurring.
+    total_population = "B01003_001",
+    total_male_population = "B01001_002",
+    total_female_population = "B01001_026",
+    median_age = "B01002_001",
+    male_median_age ="B01002_002",
+    female_median_age = "B01002_003",
+    recent_movers = "B07201_003", # households that moved into the City in last year, i.e. different house one year ago
+    foreign_born_population = "B05006_001", # new immigrants are often displaced first
+    
+    # Race and ethnicity: Tracking racial composition changes is key to identifying gentrification patterns.
+    white_NH_race = "B03002_003",
+    black_NH_race = "B03002_004",
+    asian_NH_race = "B03002_006",
+    hisp_race = "B03002_012",
+    
+    # Transportation and mobility: Rising transit use signals affordability shifts and changing commuting patterns.
+    public_transit_users = "B08134_061", 
+    mean_commute_time = "B08303_001",
+    no_vehicle_households = "B08201_002", 
+    commute_alone = "B08101_009"
+)
+
+# Set Year for Analysis
+year_selected <- 2017
+
+# Retrieve ACS Data at Tract Level for Essex County
+tract_data_2017 <- get_acs(
+  geography = "tract",  # Getting data at census tract level
+  state = 34, 
+  county = "013",  # Essex County
+  variables = vars_acs_2017,  # Your defined variables
+  year = year_selected,
+  survey = "acs5",
+  geometry = TRUE  # Keep spatial data for mapping
+)
+
+# Filter the Essex County ACS data to keep only Newark tracts
+newark_tract_2017 <- tract_data_2017 %>%
+  filter(GEOID %in% newark_tract_geoids)
+
+# Check the filtered data
+head(newark_tract_2017)
+
+# Ensure Newark data is in sf format
+newark_tract_2017 <- newark_tract_2017 %>%
+  st_as_sf()
+
+# Convert Newark tract data from long to wide format
+newark_tract_wide_2017 <- newark_tract_2017 %>%
+  pivot_wider(
+    names_from = variable,    # Column names become variables
+    values_from = c(estimate, moe)  # Keep estimates and margin of error
+  )
+
+# Display Sample Data
+head(newark_tract_wide_2017)
+
+# Remove columns with "moe" in their names
+newark_tract_wide_2017 <- newark_tract_wide_2017 %>%
+  select(-contains("moe"))
+
+# Rename columns by replacing "estimate" with "2017"
+colnames(newark_tract_wide_2017) <- gsub("estimate", "2017", colnames(newark_tract_wide_2017))
+
+# Remove ", Essex County, New Jersey" from the NAME column
+newark_tract_wide_2017 <- newark_tract_wide_2017 %>%
+  mutate(NAME = str_replace(NAME, ", Essex County, New Jersey", ""))
+
+# Check cleaned dataset
+head(newark_tract_wide_2017)
+
+
+
+
+
+
+# ACS 2016 data
+
+vars_acs_2016 <- c(
+
+    # Business and Economy: Gentrification and displacement are often linked to economic shifts, such as rising business investments, self-employment trends, and industry transitions.
+    self_employed_incorporated = "B08128_004", # signals entrepreneurship growth
+    self_employed_not_incorporated = "B08128_009", # indicates local small business activity
+    employment_industry = "C24030_001", # tracks workforce composition
+    worker_class = "B24080_001", # private vs govt vs self-employed
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Education: Higher educational attainment in historically lower-income areas can indicate an influx of more affluent populations (a sign of gentrification).
+    bachelor_degree_or_higher = "B15003_022",
+    bachelor_male = "B15002_015",
+    masters_male = "B15002_016",
+    doctorate_male = "B15002_018",
+    bachelor_female = "B15002_032",
+    masters_female = "B15002_033",
+    doctorate_female = "B15002_035",
+    educational_attainment_total = "B15002_001", 
+    professional_degree_male = "B15002_017",
+    professional_degree_female = "B15002_034",
+    highschool_dropout = "B15003_002", # adults 25+ without high school diploma
+    
+    # Employment: Changes in employment types and income levels impact housing affordability and displacement risks.
+    total_labor_force = "B23025_002", # total workers or civilian labor force
+    total_employed = "B23025_004", # total employed population
+    total_unemployed = "B23025_005",
+    remote_workers = "B08006_017", # working from home (remote work trends)
+    median_hh_income = "B19013_001", # to track economic shifts
+    poverty_level = "B17001_002",
+    service_industry = "B24011_018", #This includes food service workers, janitors, security guards, and personal care aides who typically rely on affordable housing near their workplaces and may be displaced by rising rents.
+    mgmt_business_sc_arts_industry = "B24011_002", # job growth in professional, scientific, and technical services 
+    
+    # Families and living arrangements: Family structure impacts housing stability, and displacement disproportionately affects single-parent and low-income households.
+    total_households = "B11001_001",
+    family_households = "B11001_002",
+    nonfamily_households = "B11001_007",
+    households_with_children = "B11003_001",
+    
+    # Health (Limited ACS Data on Health, but Housing & Poverty Affect Health Outcomes)
+    disabled_population = "B18101_001",
+    
+    # Housing: Housing affordability and instability are one of the strongest displacement indicators.
+    total_housing_units = "B25001_001",
+    median_gross_rent = "B25064_001",
+    median_home_value = "B25077_001",
+    rent_burden_30plus = "B25070_007",
+    rent_burden_50plus = "B25070_010",
+    owner_occupied_units = "B25003_002",
+    renter_occupied_units = "B25003_003",
+    rent_100_below = "B25063_003",
+    rent_100_149 = "B25063_004",
+    rent_150_199 = "B25063_005",
+    rent_200_249 = "B25063_006",
+    rent_250_299 = "B25063_007",
+    rent_300_349 = "B25063_008",
+    rent_350_399 = "B25063_009",
+    rent_400_449 = "B25063_010",
+    rent_450_499 = "B25063_011",
+    rent_500_549 = "B25063_012",
+    rent_550_599 = "B25063_013",
+    rent_600_649 = "B25063_014",
+    rent_650_699 = "B25063_015",
+    rent_700_749 = "B25063_016",
+    rent_750_799 = "B25063_017",
+    rent_800_899 = "B25063_018",
+    rent_900_999 = "B25063_019",
+    rent_1000_1249 = "B25063_020",
+    rent_1250_1499 = "B25063_021",
+    rent_1500_1999 = "B25063_022",
+    rent_2000_2499 = "B25063_023",
+    rent_2500_2999 = "B25063_024",
+    rent_3000_3499 = "B25063_025",
+    rent_3500_plus = "B25063_026",
+    total_occupied_units = "B25002_002",
+    total_vacant_units = "B25002_003",
+    units_built_2020plus = "B25034_002",
+    units_built_2010_2019 = "B25034_003",
+    units_built_2000_2009 = "B25034_004",
+    households_cash_rent = "B25063_002",
+    households_no_cash_rent = "B25063_027",
+    overcrowded_owner_occupied_households = "B25014_007", # Households experiencing severe overcrowding (2+ persons per room)
+    housing_before_1939 = "B25034_011", # Older units may indicate disinvestment, increasing gentrification potential
+    households_receiving_assistance = "B19058_002", #This variable provides the total number of households receiving either cash public assistance or Food Stamps/SNAP, making it useful for analyzing households benefiting from these programs.
+    
+    # Income and poverty: Income inequality shapes affordability and determines displacement risks.
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Population and people (migration and displacement indicators): Tracking population shifts can reveal where displacement is occurring.
+    total_population = "B01003_001",
+    total_male_population = "B01001_002",
+    total_female_population = "B01001_026",
+    median_age = "B01002_001",
+    male_median_age ="B01002_002",
+    female_median_age = "B01002_003",
+    recent_movers = "B07201_003", # households that moved into the City in last year, i.e. different house one year ago
+    foreign_born_population = "B05006_001", # new immigrants are often displaced first
+    
+    # Race and ethnicity: Tracking racial composition changes is key to identifying gentrification patterns.
+    white_NH_race = "B03002_003",
+    black_NH_race = "B03002_004",
+    asian_NH_race = "B03002_006",
+    hisp_race = "B03002_012",
+    
+    # Transportation and mobility: Rising transit use signals affordability shifts and changing commuting patterns.
+    public_transit_users = "B08134_061", 
+    mean_commute_time = "B08303_001",
+    no_vehicle_households = "B08201_002", 
+    commute_alone = "B08101_009"
+)
+
+# Set Year for Analysis
+year_selected <- 2016
+
+# Retrieve ACS Data at Tract Level for Essex County
+tract_data_2016 <- get_acs(
+  geography = "tract",  # Getting data at census tract level
+  state = 34, 
+  county = "013",  # Essex County
+  variables = vars_acs_2016,  # Your defined variables
+  year = year_selected,
+  survey = "acs5",
+  geometry = TRUE  # Keep spatial data for mapping
+)
+
+# Filter the Essex County ACS data to keep only Newark tracts
+newark_tract_2016 <- tract_data_2016 %>%
+  filter(GEOID %in% newark_tract_geoids)
+
+# Check the filtered data
+head(newark_tract_2016)
+
+# Ensure Newark data is in sf format
+newark_tract_2016 <- newark_tract_2016 %>%
+  st_as_sf()
+
+# Convert Newark tract data from long to wide format
+newark_tract_wide_2016 <- newark_tract_2016 %>%
+  pivot_wider(
+    names_from = variable,    # Column names become variables
+    values_from = c(estimate, moe)  # Keep estimates and margin of error
+  )
+
+# Display Sample Data
+head(newark_tract_wide_2016)
+
+# Remove columns with "moe" in their names
+newark_tract_wide_2016 <- newark_tract_wide_2016 %>%
+  select(-contains("moe"))
+
+# Rename columns by replacing "estimate" with "2016"
+colnames(newark_tract_wide_2016) <- gsub("estimate", "2016", colnames(newark_tract_wide_2016))
+
+# Remove ", Essex County, New Jersey" from the NAME column
+newark_tract_wide_2016 <- newark_tract_wide_2016 %>%
+  mutate(NAME = str_replace(NAME, ", Essex County, New Jersey", ""))
+
+# Check cleaned dataset
+head(newark_tract_wide_2016)
+
+
+
+
+
+
+# ACS 2015 data
+
+vars_acs_2015 <- c(
+
+    # Business and Economy: Gentrification and displacement are often linked to economic shifts, such as rising business investments, self-employment trends, and industry transitions.
+    self_employed_incorporated = "B08128_004", # signals entrepreneurship growth
+    self_employed_not_incorporated = "B08128_009", # indicates local small business activity
+    employment_industry = "C24030_001", # tracks workforce composition
+    worker_class = "B24080_001", # private vs govt vs self-employed
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Education: Higher educational attainment in historically lower-income areas can indicate an influx of more affluent populations (a sign of gentrification).
+    bachelor_degree_or_higher = "B15003_022",
+    bachelor_male = "B15002_015",
+    masters_male = "B15002_016",
+    doctorate_male = "B15002_018",
+    bachelor_female = "B15002_032",
+    masters_female = "B15002_033",
+    doctorate_female = "B15002_035",
+    educational_attainment_total = "B15002_001", 
+    professional_degree_male = "B15002_017",
+    professional_degree_female = "B15002_034",
+    highschool_dropout = "B15003_002", # adults 25+ without high school diploma
+    
+    # Employment: Changes in employment types and income levels impact housing affordability and displacement risks.
+    total_labor_force = "B23025_002", # total workers or civilian labor force
+    total_employed = "B23025_004", # total employed population
+    total_unemployed = "B23025_005",
+    remote_workers = "B08006_017", # working from home (remote work trends)
+    median_hh_income = "B19013_001", # to track economic shifts
+    poverty_level = "B17001_002",
+    service_industry = "B24011_018", #This includes food service workers, janitors, security guards, and personal care aides who typically rely on affordable housing near their workplaces and may be displaced by rising rents.
+    mgmt_business_sc_arts_industry = "B24011_002", # job growth in professional, scientific, and technical services 
+    
+    # Families and living arrangements: Family structure impacts housing stability, and displacement disproportionately affects single-parent and low-income households.
+    total_households = "B11001_001",
+    family_households = "B11001_002",
+    nonfamily_households = "B11001_007",
+    households_with_children = "B11003_001",
+    
+    # Health (Limited ACS Data on Health, but Housing & Poverty Affect Health Outcomes)
+    disabled_population = "B18101_001",
+    
+    # Housing: Housing affordability and instability are one of the strongest displacement indicators.
+    total_housing_units = "B25001_001",
+    median_gross_rent = "B25064_001",
+    median_home_value = "B25077_001",
+    rent_burden_30plus = "B25070_007",
+    rent_burden_50plus = "B25070_010",
+    owner_occupied_units = "B25003_002",
+    renter_occupied_units = "B25003_003",
+    rent_100_below = "B25063_003",
+    rent_100_149 = "B25063_004",
+    rent_150_199 = "B25063_005",
+    rent_200_249 = "B25063_006",
+    rent_250_299 = "B25063_007",
+    rent_300_349 = "B25063_008",
+    rent_350_399 = "B25063_009",
+    rent_400_449 = "B25063_010",
+    rent_450_499 = "B25063_011",
+    rent_500_549 = "B25063_012",
+    rent_550_599 = "B25063_013",
+    rent_600_649 = "B25063_014",
+    rent_650_699 = "B25063_015",
+    rent_700_749 = "B25063_016",
+    rent_750_799 = "B25063_017",
+    rent_800_899 = "B25063_018",
+    rent_900_999 = "B25063_019",
+    rent_1000_1249 = "B25063_020",
+    rent_1250_1499 = "B25063_021",
+    rent_1500_1999 = "B25063_022",
+    rent_2000_2499 = "B25063_023",
+    rent_2500_2999 = "B25063_024",
+    rent_3000_3499 = "B25063_025",
+    rent_3500_plus = "B25063_026",
+    total_occupied_units = "B25002_002",
+    total_vacant_units = "B25002_003",
+    units_built_2020plus = "B25034_002",
+    units_built_2010_2019 = "B25034_003",
+    units_built_2000_2009 = "B25034_004",
+    households_cash_rent = "B25063_002",
+    households_no_cash_rent = "B25063_027",
+    overcrowded_owner_occupied_households = "B25014_007", # Households experiencing severe overcrowding (2+ persons per room)
+    housing_before_1939 = "B25034_011", # Older units may indicate disinvestment, increasing gentrification potential
+    households_receiving_assistance = "B19058_002", #This variable provides the total number of households receiving either cash public assistance or Food Stamps/SNAP, making it useful for analyzing households benefiting from these programs.
+    
+    # Income and poverty: Income inequality shapes affordability and determines displacement risks.
+    median_hh_income = "B19013_001", # to track economic shifts
+    per_capita_income = "B19301_001", # wealth concentration measure
+    gini_index = "B19083_001",  # rising income inequality is a sign of economic displacement
+    
+    # Population and people (migration and displacement indicators): Tracking population shifts can reveal where displacement is occurring.
+    total_population = "B01003_001",
+    total_male_population = "B01001_002",
+    total_female_population = "B01001_026",
+    median_age = "B01002_001",
+    male_median_age ="B01002_002",
+    female_median_age = "B01002_003",
+    recent_movers = "B07201_003", # households that moved into the City in last year, i.e. different house one year ago
+    foreign_born_population = "B05006_001", # new immigrants are often displaced first
+    
+    # Race and ethnicity: Tracking racial composition changes is key to identifying gentrification patterns.
+    white_NH_race = "B03002_003",
+    black_NH_race = "B03002_004",
+    asian_NH_race = "B03002_006",
+    hisp_race = "B03002_012",
+    
+    # Transportation and mobility: Rising transit use signals affordability shifts and changing commuting patterns.
+    public_transit_users = "B08134_061", 
+    mean_commute_time = "B08303_001",
+    no_vehicle_households = "B08201_002", 
+    commute_alone = "B08101_009"
+)
+
+# Set Year for Analysis
+year_selected <- 2015
+
+# Retrieve ACS Data at Tract Level for Essex County
+tract_data_2015 <- get_acs(
+  geography = "tract",  # Getting data at census tract level
+  state = 34, 
+  county = "013",  # Essex County
+  variables = vars_acs_2015,  # Your defined variables
+  year = year_selected,
+  survey = "acs5",
+  geometry = TRUE  # Keep spatial data for mapping
+)
+
+# Filter the Essex County ACS data to keep only Newark tracts
+newark_tract_2015 <- tract_data_2015 %>%
+  filter(GEOID %in% newark_tract_geoids)
+
+# Check the filtered data
+head(newark_tract_2015)
+
+# Ensure Newark data is in sf format
+newark_tract_2015 <- newark_tract_2015 %>%
+  st_as_sf()
+
+# Convert Newark tract data from long to wide format
+newark_tract_wide_2015 <- newark_tract_2015 %>%
+  pivot_wider(
+    names_from = variable,    # Column names become variables
+    values_from = c(estimate, moe)  # Keep estimates and margin of error
+  )
+
+# Display Sample Data
+head(newark_tract_wide_2015)
+
+# Remove columns with "moe" in their names
+newark_tract_wide_2015 <- newark_tract_wide_2015 %>%
+  select(-contains("moe"))
+
+# Rename columns by replacing "estimate" with "2015"
+colnames(newark_tract_wide_2015) <- gsub("estimate", "2015", colnames(newark_tract_wide_2015))
+
+# Remove ", Essex County, New Jersey" from the NAME column
+newark_tract_wide_2015 <- newark_tract_wide_2015 %>%
+  mutate(NAME = str_replace(NAME, ", Essex County, New Jersey", ""))
+
+# Check cleaned dataset
+head(newark_tract_wide_2015)
+
+
+```
+
+```{r}
+
+
+# Define years and datasets
+years <- 2015:2023
+datasets <- list(
+  newark_tract_wide_2015, newark_tract_wide_2016, newark_tract_wide_2017,
+  newark_tract_wide_2018, newark_tract_wide_2019, newark_tract_wide_2020,
+  newark_tract_wide_2021, newark_tract_wide_2022, newark_tract_wide_2023
+)
+
+# Remove spatial geometry to keep only tabular data
+datasets <- lapply(datasets, st_drop_geometry)
+
+# Extract GEOID, NAME, and total population for each year, renaming columns
+population_data <- reduce(
+  map2(datasets, years, function(data, year) {
+    data %>%
+      select(GEOID, NAME, !!paste0("population_", year) := !!sym(paste0(year, "_total_population")))
+  }),
+  full_join, by = c("GEOID", "NAME")
+)
+
+
+# Fix duplicates: Ensure only one row per GEOID
+population_data_clean <- population_data %>%
+  group_by(GEOID) %>%
+  summarise(
+    NAME = first(NAME),  # Keep the first occurrence of NAME
+    across(starts_with("population_"), sum, na.rm = TRUE),  # Sum population correctly
+    .groups = "drop"
+  )
+
+# Check for duplicates (should be empty if fixed)
+duplicated_geoids <- population_data_clean %>%
+  group_by(GEOID) %>%
+  filter(n() > 1)
+
+print(duplicated_geoids)  # If empty, issue is resolved
+
+# View final cleaned dataset
+head(population_data_clean)
+
+
+# Compute population change from 2015 to 2023
+population_data_clean <- population_data_clean %>%
+  mutate(pop_change = population_2023 - population_2015)
+
+# Merge with geographic boundaries for mapping
+newark_map <- newark_tract_wide_2023 %>% 
+  select(GEOID, geometry) %>% 
+  left_join(population_data_clean, by = "GEOID")
+
+# Plot the choropleth map
+ggplot(newark_map) +
+  geom_sf(aes(fill = pop_change), color = "white", size = 0.2) +
+  scale_fill_gradient2(low = "red", mid = "white", high = "blue", midpoint = 0,
+                       name = "Pop Change (2015-2023)") +
+  labs(title = "Population Change in Newark Census Tracts (2015-2023)",
+       subtitle = "Red = Population Decline, Blue = Growth",
+       caption = "Source: ACS 5-Year Estimates") +
+  theme_minimal()
+
+
+
+
+
+
+# file path to the SHP file
+newark_nbd_sf <- st_read("Newark_Neighborhoods.shp")
+
+# Check the first few rows
+head(newark_nbd_sf)
+
+newark_tracts_sf <- newark_tracts %>%
+  st_as_sf(coords = c("INTPTLON", "INTPTLAT"), crs = 4326) # Convert to spatial using tract centroids
+
+st_crs(newark_tracts_sf)
+st_crs(newark_nbd_sf)
+
+# Check CRS of both datasets
+print(st_crs(newark_tracts_sf))
+print(st_crs(newark_nbd_sf))
+
+# Transform newark_tracts_sf to match the neighborhood CRS
+newark_tracts_sf <- st_transform(newark_tracts_sf, st_crs(newark_nbd_sf))
+
+# Assign each census tract to a neighborhood
+newark_tracts_with_nbd <- st_join(newark_tracts_sf, newark_nbd_sf, join = st_within)
+
+# Select only useful columns: GEOID (Tract ID), Census Tract Name, and Neighborhood Name
+newark_tracts_with_nbd <- newark_tracts_with_nbd %>%
+  select(GEOID, NAMELSAD, name, geometry)  # Keep Census Tract and Neighborhood Name
+
+# Rename for clarity
+colnames(newark_tracts_with_nbd) <- c("GEOID", "Census_Tract", "Neighborhood", "geometry")
+
+
+
+
+
+
+
+```
+
+```{r}
+
+# List of years
+years <- 2015:2023
+
+# Initialize an empty list to store data
+pop_data_list <- list()
+
+# Loop through each year's dataset and extract population data
+for (year in years) {
+  
+  # Construct the dataset name dynamically
+  df_name <- paste0("newark_tract_wide_", year)
+  
+  # Load the dataset (assuming all are loaded in the environment)
+  df <- get(df_name)
+  
+  # Extract relevant columns dynamically
+  total_pop_col <- paste0(year, "_total_population")
+  race_cols <- c(
+    "white" = paste0(year, "_white_NH_race"),
+    "black" = paste0(year, "_black_NH_race"),
+    "asian" = paste0(year, "_asian_NH_race"),
+    "hispanic" = paste0(year, "_hisp_race")
+  )
+  
+  # Aggregate total population by summing all rows
+  pop_summary <- df %>%
+    summarise(
+      total_population = sum(.data[[total_pop_col]], na.rm = TRUE),
+      across(all_of(race_cols), ~ sum(.x, na.rm = TRUE))  # Summing race populations
+    ) %>%
+    mutate(
+      other = total_population - (white + black + asian + hispanic),  # Compute 'other' category
+      year = as.character(year)  # Ensure year is a character
+    ) %>%
+    select(year, white, black, asian, hispanic, other)  # Keep only race categories and year
+
+  # Store in list
+  pop_data_list[[as.character(year)]] <- pop_summary
+}
+
+# Combine all years into a single data frame
+pop_data <- bind_rows(pop_data_list) 
+
+str(pop_data)
+
+# Ensure `year` is a character type to avoid type mismatch
+pop_data$year <- as.character(pop_data$year)
+
+# Remove geometry column before pivoting
+pop_data_no_geom <- st_drop_geometry(pop_data)
+
+# Convert data to long format explicitly selecting only race columns
+pop_data_long <- pop_data_no_geom %>%
+  pivot_longer(
+    cols = c("white", "black", "asian", "hispanic", "other"),  # Select only valid race columns
+    names_to = "race",
+    values_to = "population"
+  )
+
+# Verify the transformation
+head(pop_data_long)
+
+# Define colors for racial groups
+race_colors <- c("white" = "blue", "black" = "red", "asian" = "green", "hispanic" = "orange", "other" = "purple")
+
+# **Plot stacked bar chart**
+ggplot(pop_data_long, aes(x = factor(year), y = population, fill = race)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7) +
+  scale_fill_manual(values = race_colors, name = "Race") +
+  scale_y_continuous(labels = comma) +  # Convert Y-axis to readable format
+  theme_minimal() +
+  labs(
+    title = "Population Change by Race (2015-2023)",
+    x = "Year",
+    y = "Population",
+    fill = "Race"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels for readability
+    legend.position = "right",
+    text = element_text(size = 14)  # Increase font size for readability
+  )
+
+
+```
+
+```{r}
+
+# Define the range of years
+years <- 2015:2023
+
+# Initialize an empty list to store data
+income_data_list <- list()
+
+# Loop through each year's dataset and extract median household income
+for (year in years) {
+  # Construct the dataset name dynamically
+  df_name <- paste0("newark_tract_wide_", year)
+  
+  # Load the dataset dynamically (assuming all are loaded in the environment)
+  df <- get(df_name)
+  
+  # Define the column name dynamically based on year
+  income_col <- paste0(year, "_median_hh_income")
+  
+  # Select relevant columns (GEOID for spatial mapping + median income)
+  income_data <- df %>%
+    select(GEOID, all_of(income_col)) %>%
+    rename(median_income = all_of(income_col)) %>%
+    mutate(year = year)  # Add year column
+  
+  # Store the cleaned data in the list
+  income_data_list[[as.character(year)]] <- income_data
+}
+
+# Combine all years into a single dataframe
+median_hh_income_data <- bind_rows(income_data_list)
+
+# View the final dataset
+head(median_hh_income_data)
+
+# Convert to long format for ggplot
+income_long <- median_hh_income_data %>%
+  group_by(year) %>%
+  summarize(median_income = mean(median_income, na.rm = TRUE))
+
+# Plot the multi-line chart
+ggplot(income_long, aes(x = year, y = median_income)) +
+  geom_line(size = 1.5, color = "blue") +
+  geom_point(size = 3, color = "blue") +
+  scale_y_continuous(labels = dollar) +  # Format Y-axis as currency
+  theme_minimal() +
+  labs(title = "Median Household Income in Newark (2015-2023)",
+       x = "Year",
+       y = "Median Household Income ($)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        text = element_text(size = 14))
+
+```
+```{r}
+
+
+### **Step 1: Merge Census Tract Data with Household Income Data** ###
+# Drop geometry from census tracts dataset and select required columns
+newark_tracts_no_geom <- newark_tracts_with_nbd %>%
+  st_drop_geometry() %>%
+  mutate(GEOID = as.character(GEOID)) %>%  # Convert GEOID to character
+  select(GEOID, Census_Tract, Neighborhood)
+
+# Convert GEOID to character in the income dataset to ensure a correct join
+median_hh_income_data <- median_hh_income_data %>%
+  mutate(GEOID = as.character(GEOID))
+
+# Merge household income data with neighborhood info using GEOID
+income_nbd_data <- median_hh_income_data %>%
+  left_join(newark_tracts_no_geom, by = "GEOID")
+
+# View data to confirm the merge worked correctly
+head(income_nbd_data)
+
+### **Step 2: Aggregate Census Tract Data to Neighborhood Level** ###
+income_nbd_agg <- income_nbd_data %>%
+  group_by(Neighborhood, year) %>%
+  summarise(
+    median_income = mean(median_income, na.rm = TRUE),  # Compute average income per neighborhood
+    total_tracts = n()  # Count number of tracts per neighborhood
+  ) %>%
+  ungroup()
+
+# View the aggregated data
+head(income_nbd_agg)
+
+### **Step 3: Ensure Neighborhood Polygon Data is Ready for Spatial Join** ###
+# Rename "NAME" column in newark_nbd_sf to match the Neighborhood column
+newark_nbd_sf <- newark_nbd_sf %>%
+  rename(Neighborhood = name)
+
+# Check CRS of both datasets
+st_crs(newark_nbd_sf)  # Check CRS of neighborhood polygons
+st_crs(income_nbd_agg)  # Should be NA since it's not spatial
+
+### **Step 4: Convert Aggregated Data to SF Object & Ensure Matching CRS** ###
+# Convert income data into an sf object
+income_nbd_agg_sf <- st_as_sf(income_nbd_agg, coords = NULL, crs = st_crs(newark_nbd_sf))
+
+# Ensure both datasets use the same CRS
+income_nbd_agg_sf <- st_transform(income_nbd_agg_sf, st_crs(newark_nbd_sf))
+
+### **Step 5: Perform Spatial Join Using `st_join()` to Attach Income Data to Neighborhoods** ###
+income_nbd_sf <- st_join(newark_nbd_sf, income_nbd_agg_sf, join = st_intersects)
+
+# Drop any duplicate columns (if needed)
+income_nbd_sf <- income_nbd_sf %>%
+  select(-Neighborhood.y) %>%
+  rename(Neighborhood = Neighborhood.x)
+
+# View the final dataset
+head(income_nbd_sf)
+
+tm_shape(income_nbd_sf) +
+  tm_polygons("median_income",
+              palette = "Blues",
+              style = "quantile",
+              title = "Median Household Income ($)") +
+  tm_facets("year", free.scales = FALSE) +  # Show multiple years in one map
+  tm_layout(title = "Median Household Income by Neighborhood (2015-2023)",
+            legend.outside = TRUE)
+
+# Summarize median income by Neighborhood and Year
+income_summary <- income_nbd_sf %>%
+  group_by(Neighborhood, year) %>%
+  summarise(median_income = mean(median_income, na.rm = TRUE)) %>%
+  pivot_wider(names_from = year, values_from = median_income)
+
+# View the summarized dataset
+print(income_summary)
+
+
+
+
+
+```
+
+
+
+```{r}
+
+# Ensure all spatial datasets have the same CRS as newark_nbd_sf
+target_crs <- st_crs(newark_nbd_sf)  # Get CRS from neighborhood data
+
+# Load the shapefile
+newark_ward_sf <- st_read("Newark_Wards.shp")
+
+newark_tract_wide_2023 <- st_transform(newark_tract_wide_2023, target_crs)
+newark_tract_wide_2022 <- st_transform(newark_tract_wide_2022, target_crs)
+newark_tract_wide_2021 <- st_transform(newark_tract_wide_2021, target_crs)
+newark_tract_wide_2020 <- st_transform(newark_tract_wide_2020, target_crs)
+newark_tract_wide_2019 <- st_transform(newark_tract_wide_2019, target_crs)
+newark_tract_wide_2018 <- st_transform(newark_tract_wide_2018, target_crs)
+newark_tract_wide_2017 <- st_transform(newark_tract_wide_2017, target_crs)
+newark_tract_wide_2016 <- st_transform(newark_tract_wide_2016, target_crs)
+newark_tract_wide_2015 <- st_transform(newark_tract_wide_2015, target_crs)
+newark_nbd_sf <- st_transform(newark_nbd_sf, target_crs)
+newark_tracts_with_nbd <- st_transform(newark_tracts_with_nbd, target_crs)
+newark_ward_sf <- st_transform(newark_ward_sf, target_crs)
+
+# 1️⃣ Remove geometry column from newark_tract_wide_2023
+newark_tract_wide_2023 <- newark_tract_wide_2023 %>%
+  st_drop_geometry()
+
+# 2️⃣ View the updated DataFrame
+print(newark_tract_wide_2023)
+
+# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+newark_tract_wide_2023 <- newark_tract_wide_2023 %>%
+  rename(Census_Tract = NAME)
+
+# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+newark_tract_wide_2023 <- newark_tract_wide_2023 %>%
+  left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
+            by = "Census_Tract")
+
+# 3️⃣ View the updated DataFrame
+print(newark_tract_wide_2023)
+
+# Rename columns: Remove "2023_" prefix and add "_2023" suffix
+colnames(newark_tract_wide_2023) <- gsub("^2023_", "", colnames(newark_tract_wide_2023))
+colnames(newark_tract_wide_2023) <- paste0(colnames(newark_tract_wide_2023), "_2023")
+colnames(newark_tract_wide_2023)[colnames(newark_tract_wide_2023) %in% c("GEOID_2023", "Census_Tract_2023", "Neighborhood_2023", "geometry_2023")] <- 
+  c("GEOID", "Census_Tract", "Neighborhood", "geometry")
+
+# 1️⃣ Remove geometry column from newark_tract_wide_2022
+newark_tract_wide_2022 <- newark_tract_wide_2022 %>%
+  st_drop_geometry()
+
+# 2️⃣ View the updated DataFrame
+print(newark_tract_wide_2022)
+
+# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+newark_tract_wide_2022 <- newark_tract_wide_2022 %>%
+  rename(Census_Tract = NAME)
+
+# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+newark_tract_wide_2022 <- newark_tract_wide_2022 %>%
+  left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
+            by = "Census_Tract")
+
+# 3️⃣ View the updated DataFrame
+print(newark_tract_wide_2022)
+
+# Rename columns: Remove "2022_" prefix and add "_2022" suffix
+colnames(newark_tract_wide_2022) <- gsub("^2022_", "", colnames(newark_tract_wide_2022))
+colnames(newark_tract_wide_2022) <- paste0(colnames(newark_tract_wide_2022), "_2022")
+colnames(newark_tract_wide_2022)[colnames(newark_tract_wide_2022) %in% c("GEOID_2022", "Census_Tract_2022", "Neighborhood_2022", "geometry_2022")] <- 
+  c("GEOID", "Census_Tract", "Neighborhood", "geometry")
+
+
+# 1️⃣ Remove geometry column from newark_tract_wide_2021
+newark_tract_wide_2021 <- newark_tract_wide_2021 %>%
+  st_drop_geometry()
+
+# 2️⃣ View the updated DataFrame
+print(newark_tract_wide_2021)
+
+# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+newark_tract_wide_2021 <- newark_tract_wide_2021 %>%
+  rename(Census_Tract = NAME)
+
+# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+newark_tract_wide_2021 <- newark_tract_wide_2021 %>%
+  left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
+            by = "Census_Tract")
+
+# 3️⃣ View the updated DataFrame
+print(newark_tract_wide_2021)
+
+# Rename columns: Remove "2021_" prefix and add "_2021" suffix
+colnames(newark_tract_wide_2021) <- gsub("^2021_", "", colnames(newark_tract_wide_2021))
+colnames(newark_tract_wide_2021) <- paste0(colnames(newark_tract_wide_2021), "_2021")
+colnames(newark_tract_wide_2021)[colnames(newark_tract_wide_2021) %in% c("GEOID_2021", "Census_Tract_2021", "Neighborhood_2021", "geometry_2021")] <- 
+  c("GEOID", "Census_Tract", "Neighborhood", "geometry")
+
+
+# 1️⃣ Remove geometry column from newark_tract_wide_2020
+newark_tract_wide_2020 <- newark_tract_wide_2020 %>%
+  st_drop_geometry()
+
+# 2️⃣ View the updated DataFrame
+print(newark_tract_wide_2020)
+
+# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+newark_tract_wide_2020 <- newark_tract_wide_2020 %>%
+  rename(Census_Tract = NAME)
+
+# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+newark_tract_wide_2020 <- newark_tract_wide_2020 %>%
+  left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
+            by = "Census_Tract")
+
+# 3️⃣ View the updated DataFrame
+print(newark_tract_wide_2020)
+
+# Rename columns: Remove "2020_" prefix and add "_2020" suffix
+colnames(newark_tract_wide_2020) <- gsub("^2020_", "", colnames(newark_tract_wide_2020))
+colnames(newark_tract_wide_2020) <- paste0(colnames(newark_tract_wide_2020), "_2020")
+colnames(newark_tract_wide_2020)[colnames(newark_tract_wide_2020) %in% c("GEOID_2020", "Census_Tract_2020", "Neighborhood_2020", "geometry_2020")] <- 
+  c("GEOID", "Census_Tract", "Neighborhood", "geometry")
+
+
+# 1️⃣ Remove geometry column from newark_tract_wide_2019
+newark_tract_wide_2019 <- newark_tract_wide_2019 %>%
+  st_drop_geometry()
+
+# 2️⃣ View the updated DataFrame
+print(newark_tract_wide_2019)
+
+# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+newark_tract_wide_2019 <- newark_tract_wide_2019 %>%
+  rename(Census_Tract = NAME)
+
+# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+newark_tract_wide_2019 <- newark_tract_wide_2019 %>%
+  left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
+            by = "Census_Tract")
+
+# 3️⃣ View the updated DataFrame
+print(newark_tract_wide_2019)
+
+# Rename columns: Remove "2019_" prefix and add "_2019" suffix
+colnames(newark_tract_wide_2019) <- gsub("^2019_", "", colnames(newark_tract_wide_2019))
+colnames(newark_tract_wide_2019) <- paste0(colnames(newark_tract_wide_2019), "_2019")
+colnames(newark_tract_wide_2019)[colnames(newark_tract_wide_2019) %in% c("GEOID_2019", "Census_Tract_2019", "Neighborhood_2019", "geometry_2019")] <- 
+  c("GEOID", "Census_Tract", "Neighborhood", "geometry")
+
+
+
+# 1️⃣ Remove geometry column from newark_tract_wide_2018
+newark_tract_wide_2018 <- newark_tract_wide_2018 %>%
+  st_drop_geometry()
+
+# 2️⃣ View the updated DataFrame
+print(newark_tract_wide_2018)
+
+# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+newark_tract_wide_2018 <- newark_tract_wide_2018 %>%
+  rename(Census_Tract = NAME)
+
+# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+newark_tract_wide_2018 <- newark_tract_wide_2018 %>%
+  left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
+            by = "Census_Tract")
+
+# 3️⃣ View the updated DataFrame
+print(newark_tract_wide_2018)
+
+# Rename columns: Remove "2018_" prefix and add "_2018" suffix
+colnames(newark_tract_wide_2018) <- gsub("^2018_", "", colnames(newark_tract_wide_2018))
+colnames(newark_tract_wide_2018) <- paste0(colnames(newark_tract_wide_2018), "_2018")
+colnames(newark_tract_wide_2018)[colnames(newark_tract_wide_2018) %in% c("GEOID_2018", "Census_Tract_2018", "Neighborhood_2018", "geometry_2018")] <- 
+  c("GEOID", "Census_Tract", "Neighborhood", "geometry")
+
+
+# 1️⃣ Remove geometry column from newark_tract_wide_2017
+newark_tract_wide_2017 <- newark_tract_wide_2017 %>%
+  st_drop_geometry()
+
+# 2️⃣ View the updated DataFrame
+print(newark_tract_wide_2017)
+
+# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+newark_tract_wide_2017 <- newark_tract_wide_2017 %>%
+  rename(Census_Tract = NAME)
+
+# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+newark_tract_wide_2017 <- newark_tract_wide_2017 %>%
+  left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
+            by = "Census_Tract")
+
+# 3️⃣ View the updated DataFrame
+print(newark_tract_wide_2017)
+
+# Rename columns: Remove "2017_" prefix and add "_2017" suffix
+colnames(newark_tract_wide_2017) <- gsub("^2017_", "", colnames(newark_tract_wide_2017))
+colnames(newark_tract_wide_2017) <- paste0(colnames(newark_tract_wide_2017), "_2017")
+colnames(newark_tract_wide_2017)[colnames(newark_tract_wide_2017) %in% c("GEOID_2017", "Census_Tract_2017", "Neighborhood_2017", "geometry_2017")] <- 
+  c("GEOID", "Census_Tract", "Neighborhood", "geometry")
+
+
+# 1️⃣ Remove geometry column from newark_tract_wide_2016
+newark_tract_wide_2016 <- newark_tract_wide_2016 %>%
+  st_drop_geometry()
+
+# 2️⃣ View the updated DataFrame
+print(newark_tract_wide_2016)
+
+# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+newark_tract_wide_2016 <- newark_tract_wide_2016 %>%
+  rename(Census_Tract = NAME)
+
+# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+newark_tract_wide_2016 <- newark_tract_wide_2016 %>%
+  left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
+            by = "Census_Tract")
+
+# 3️⃣ View the updated DataFrame
+print(newark_tract_wide_2016)
+
+# Rename columns: Remove "2016_" prefix and add "_2016" suffix
+colnames(newark_tract_wide_2016) <- gsub("^2016_", "", colnames(newark_tract_wide_2016))
+colnames(newark_tract_wide_2016) <- paste0(colnames(newark_tract_wide_2016), "_2016")
+colnames(newark_tract_wide_2016)[colnames(newark_tract_wide_2016) %in% c("GEOID_2016", "Census_Tract_2016", "Neighborhood_2016", "geometry_2016")] <- 
+  c("GEOID", "Census_Tract", "Neighborhood", "geometry")
+
+
+
+# 1️⃣ Remove geometry column from newark_tract_wide_2015
+newark_tract_wide_2015 <- newark_tract_wide_2015 %>%
+  st_drop_geometry()
+
+# 2️⃣ View the updated DataFrame
+print(newark_tract_wide_2015)
+
+# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+newark_tract_wide_2015 <- newark_tract_wide_2015 %>%
+  rename(Census_Tract = NAME)
+
+# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+newark_tract_wide_2015 <- newark_tract_wide_2015 %>%
+  left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
+            by = "Census_Tract")
+
+# 3️⃣ View the updated DataFrame
+print(newark_tract_wide_2015)
+
+# Rename columns: Remove "2015_" prefix and add "_2015" suffix
+colnames(newark_tract_wide_2015) <- gsub("^2015_", "", colnames(newark_tract_wide_2015))
+colnames(newark_tract_wide_2015) <- paste0(colnames(newark_tract_wide_2015), "_2015")
+colnames(newark_tract_wide_2015)[colnames(newark_tract_wide_2015) %in% c("GEOID_2015", "Census_Tract_2015", "Neighborhood_2015", "geometry_2015")] <- 
+  c("GEOID", "Census_Tract", "Neighborhood", "geometry")
+
+newark_tract_wide_2023 <- newark_tract_wide_2023 %>%
+  relocate(Neighborhood, .after = Census_Tract)
+newark_tract_wide_2022 <- newark_tract_wide_2022 %>%
+  relocate(Neighborhood, .after = Census_Tract)
+newark_tract_wide_2021 <- newark_tract_wide_2021 %>%
+  relocate(Neighborhood, .after = Census_Tract)
+newark_tract_wide_2020 <- newark_tract_wide_2020 %>%
+  relocate(Neighborhood, .after = Census_Tract)
+newark_tract_wide_2019 <- newark_tract_wide_2019 %>%
+  relocate(Neighborhood, .after = Census_Tract)
+newark_tract_wide_2018 <- newark_tract_wide_2018 %>%
+  relocate(Neighborhood, .after = Census_Tract)
+newark_tract_wide_2017 <- newark_tract_wide_2017 %>%
+  relocate(Neighborhood, .after = Census_Tract)
+newark_tract_wide_2016 <- newark_tract_wide_2016 %>%
+  relocate(Neighborhood, .after = Census_Tract)
+newark_tract_wide_2015 <- newark_tract_wide_2015 %>%
+  relocate(Neighborhood, .after = Census_Tract)
+
+# Aggregate data by Neighborhood
+newark_nbd_wide_2023 <- newark_tract_wide_2023 %>%
+  group_by(Neighborhood) %>%
+  summarize(
+    # Population and Demographics
+    total_population_2023 = sum(total_population_2023, na.rm = TRUE),
+    total_male_population_2023 = sum(total_male_population_2023, na.rm = TRUE),
+    total_female_population_2023 = sum(total_female_population_2023, na.rm = TRUE),
+    median_age_2023 = mean(median_age_2023, na.rm = TRUE),
+    male_median_age_2023 = mean(male_median_age_2023, na.rm = TRUE),
+    female_median_age_2023 = mean(female_median_age_2023, na.rm = TRUE),
+    recent_movers_2023 = sum(recent_movers_2023, na.rm = TRUE),
+    foreign_born_population_2023 = sum(foreign_born_population_2023, na.rm = TRUE),
+
+    # Business and Economy
+    self_employed_incorporated_2023 = sum(self_employed_incorporated_2023, na.rm = TRUE),
+    self_employed_not_incorporated_2023 = sum(self_employed_not_incorporated_2023, na.rm = TRUE),
+    employment_industry_2023 = sum(employment_industry_2023, na.rm = TRUE),
+    worker_class_2023 = sum(worker_class_2023, na.rm = TRUE),
+    median_hh_income_2023 = mean(median_hh_income_2023, na.rm = TRUE),
+    per_capita_income_2023 = mean(per_capita_income_2023, na.rm = TRUE),
+    gini_index_2023 = mean(gini_index_2023, na.rm = TRUE),
+    poverty_level_2023 = sum(poverty_level_2023, na.rm = TRUE), ####
+
+    # Education
+    bachelor_degree_or_higher_2023 = sum(bachelor_degree_or_higher_2023, na.rm = TRUE),
+    bachelor_male_2023 = sum(bachelor_male_2023, na.rm = TRUE),
+    masters_male_2023 = sum(masters_male_2023, na.rm = TRUE),
+    doctorate_male_2023 = sum(doctorate_male_2023, na.rm = TRUE),
+    bachelor_female_2023 = sum(bachelor_female_2023, na.rm = TRUE),
+    masters_female_2023 = sum(masters_female_2023, na.rm = TRUE),
+    doctorate_female_2023 = sum(doctorate_female_2023, na.rm = TRUE),
+    professional_degree_male_2023 = sum(professional_degree_male_2023, na.rm = TRUE),
+    professional_degree_female_2023 = sum(professional_degree_female_2023, na.rm = TRUE),
+    educational_attainment_total_2023 = sum(educational_attainment_total_2023, na.rm = TRUE),
+    highschool_dropout_2023 = sum(highschool_dropout_2023, na.rm = TRUE),
+
+    # Employment
+    total_labor_force_2023 = sum(total_labor_force_2023, na.rm = TRUE),
+    total_employed_2023 = sum(total_employed_2023, na.rm = TRUE),
+    total_unemployed_2023 = sum(total_unemployed_2023, na.rm = TRUE),
+    remote_workers_2023 = sum(remote_workers_2023, na.rm = TRUE),
+    service_industry_2023 = sum(service_industry_2023, na.rm = TRUE),
+    mgmt_business_sc_arts_industry_2023 = sum(mgmt_business_sc_arts_industry_2023, na.rm = TRUE),
+
+    # Families and Living Arrangements
+    total_households_2023 = sum(total_households_2023, na.rm = TRUE),
+    family_households_2023 = sum(family_households_2023, na.rm = TRUE),
+    nonfamily_households_2023 = sum(nonfamily_households_2023, na.rm = TRUE),
+    households_with_children_2023 = sum(households_with_children_2023, na.rm = TRUE),
+
+    # Health
+    disabled_population_2023 = sum(disabled_population_2023, na.rm = TRUE),
+
+    # Housing
+    total_housing_units_2023 = sum(total_housing_units_2023, na.rm = TRUE),
+    median_gross_rent_2023 = mean(median_gross_rent_2023, na.rm = TRUE),
+    median_home_value_2023 = mean(median_home_value_2023, na.rm = TRUE),
+    rent_burden_30plus_2023 = sum(rent_burden_30plus_2023, na.rm = TRUE),
+    rent_burden_50plus_2023 = sum(rent_burden_50plus_2023, na.rm = TRUE),
+    owner_occupied_units_2023 = sum(owner_occupied_units_2023, na.rm = TRUE),
+    renter_occupied_units_2023 = sum(renter_occupied_units_2023, na.rm = TRUE),
+    total_occupied_units_2023 = sum(total_occupied_units_2023, na.rm = TRUE),
+    total_vacant_units_2023 = sum(total_vacant_units_2023, na.rm = TRUE),
+    units_built_2020plus_2023 = sum(units_built_2020plus_2023, na.rm = TRUE),
+    units_built_2010_2019_2023 = sum(units_built_2010_2019_2023, na.rm = TRUE),
+    units_built_2000_2009_2023 = sum(units_built_2000_2009_2023, na.rm = TRUE),
+    overcrowded_owner_occupied_households_2023 = sum(overcrowded_owner_occupied_households_2023, na.rm = TRUE),
+    housing_before_1939_2023 = sum(housing_before_1939_2023, na.rm = TRUE),
+    households_receiving_assistance_2023 = sum(households_receiving_assistance_2023, na.rm = TRUE),
+    rent_100_below_2023 = sum(rent_100_below_2023, na.rm = TRUE),
+    rent_100_149_2023 = sum(rent_100_149_2023, na.rm = TRUE),
+    rent_150_199_2023 = sum(rent_150_199_2023, na.rm = TRUE),
+    rent_200_249_2023 = sum(rent_200_249_2023, na.rm = TRUE),
+    rent_250_299_2023 = sum(rent_250_299_2023, na.rm = TRUE),
+    rent_300_349_2023 = sum(rent_300_349_2023, na.rm = TRUE),
+    rent_350_399_2023 = sum(rent_350_399_2023, na.rm = TRUE),
+    rent_400_449_2023 = sum(rent_400_449_2023, na.rm = TRUE),
+    rent_450_499_2023 = sum(rent_450_499_2023, na.rm = TRUE),
+    rent_500_549_2023 = sum(rent_500_549_2023, na.rm = TRUE),
+    rent_550_599_2023 = sum(rent_550_599_2023, na.rm = TRUE),
+    rent_600_649_2023 = sum(rent_600_649_2023, na.rm = TRUE),
+    rent_650_699_2023 = sum(rent_650_699_2023, na.rm = TRUE),
+    rent_700_749_2023 = sum(rent_700_749_2023, na.rm = TRUE),
+    rent_750_799_2023 = sum(rent_750_799_2023, na.rm = TRUE),
+    rent_800_899_2023 = sum(rent_800_899_2023, na.rm = TRUE),
+    rent_900_999_2023 = sum(rent_900_999_2023, na.rm = TRUE),
+    rent_1000_1249_2023 = sum(rent_1000_1249_2023, na.rm = TRUE),
+    rent_1250_1499_2023 = sum(rent_1250_1499_2023, na.rm = TRUE),
+    rent_1500_1999_2023 = sum(rent_1500_1999_2023, na.rm = TRUE),
+    rent_2000_2499_2023 = sum(rent_2000_2499_2023, na.rm = TRUE),
+    rent_2500_2999_2023 = sum(rent_2500_2999_2023, na.rm = TRUE),
+    rent_3000_3499_2023 = sum(rent_3000_3499_2023, na.rm = TRUE),
+    rent_3500_plus_2023 = sum(rent_3500_plus_2023, na.rm = TRUE),
+    households_cash_rent_2023 = sum(households_cash_rent_2023, na.rm = TRUE),
+    households_no_cash_rent_2023 = sum(households_no_cash_rent_2023, na.rm = TRUE),
+
+    # Race & Ethnicity
+    white_NH_race_2023 = sum(white_NH_race_2023, na.rm = TRUE),
+    black_NH_race_2023 = sum(black_NH_race_2023, na.rm = TRUE),
+    asian_NH_race_2023 = sum(asian_NH_race_2023, na.rm = TRUE),
+    hisp_race_2023 = sum(hisp_race_2023, na.rm = TRUE),
+
+    # Transportation & Mobility
+    public_transit_users_2023 = sum(public_transit_users_2023, na.rm = TRUE),
+    mean_commute_time_2023 = mean(mean_commute_time_2023, na.rm = TRUE),
+    no_vehicle_households_2023 = sum(no_vehicle_households_2023, na.rm = TRUE),
+    commute_alone_2023 = sum(commute_alone_2023, na.rm = TRUE)
+  ) %>%
+  ungroup()  # Always ungroup after summarizing
+
+# View the final dataset
+print(newark_nbd_wide_2023)
+
+# Aggregate data by Neighborhood
+newark_nbd_wide_2022 <- newark_tract_wide_2022 %>%
+  group_by(Neighborhood) %>%
+  summarize(
+    # Population and Demographics
+    total_population_2022 = sum(total_population_2022, na.rm = TRUE),
+    total_male_population_2022 = sum(total_male_population_2022, na.rm = TRUE),
+    total_female_population_2022 = sum(total_female_population_2022, na.rm = TRUE),
+    median_age_2022 = mean(median_age_2022, na.rm = TRUE),
+    male_median_age_2022 = mean(male_median_age_2022, na.rm = TRUE),
+    female_median_age_2022 = mean(female_median_age_2022, na.rm = TRUE),
+    recent_movers_2022 = sum(recent_movers_2022, na.rm = TRUE),
+    foreign_born_population_2022 = sum(foreign_born_population_2022, na.rm = TRUE),
+
+    # Business and Economy
+    self_employed_incorporated_2022 = sum(self_employed_incorporated_2022, na.rm = TRUE),
+    self_employed_not_incorporated_2022 = sum(self_employed_not_incorporated_2022, na.rm = TRUE),
+    employment_industry_2022 = sum(employment_industry_2022, na.rm = TRUE),
+    worker_class_2022 = sum(worker_class_2022, na.rm = TRUE),
+    median_hh_income_2022 = mean(median_hh_income_2022, na.rm = TRUE),
+    per_capita_income_2022 = mean(per_capita_income_2022, na.rm = TRUE),
+    gini_index_2022 = mean(gini_index_2022, na.rm = TRUE),
+    poverty_level_2022 = sum(poverty_level_2022, na.rm = TRUE),
+
+    # Education
+    bachelor_degree_or_higher_2022 = sum(bachelor_degree_or_higher_2022, na.rm = TRUE),
+    bachelor_male_2022 = sum(bachelor_male_2022, na.rm = TRUE),
+    masters_male_2022 = sum(masters_male_2022, na.rm = TRUE),
+    doctorate_male_2022 = sum(doctorate_male_2022, na.rm = TRUE),
+    bachelor_female_2022 = sum(bachelor_female_2022, na.rm = TRUE),
+    masters_female_2022 = sum(masters_female_2022, na.rm = TRUE),
+    doctorate_female_2022 = sum(doctorate_female_2022, na.rm = TRUE),
+    professional_degree_male_2022 = sum(professional_degree_male_2022, na.rm = TRUE),
+    professional_degree_female_2022 = sum(professional_degree_female_2022, na.rm = TRUE),
+    educational_attainment_total_2022 = sum(educational_attainment_total_2022, na.rm = TRUE),
+    highschool_dropout_2022 = sum(highschool_dropout_2022, na.rm = TRUE),
+
+    # Employment
+    total_labor_force_2022 = sum(total_labor_force_2022, na.rm = TRUE),
+    total_employed_2022 = sum(total_employed_2022, na.rm = TRUE),
+    total_unemployed_2022 = sum(total_unemployed_2022, na.rm = TRUE),
+    remote_workers_2022 = sum(remote_workers_2022, na.rm = TRUE),
+    service_industry_2022 = sum(service_industry_2022, na.rm = TRUE),
+    mgmt_business_sc_arts_industry_2022 = sum(mgmt_business_sc_arts_industry_2022, na.rm = TRUE),
+
+    # Families and Living Arrangements
+    total_households_2022 = sum(total_households_2022, na.rm = TRUE),
+    family_households_2022 = sum(family_households_2022, na.rm = TRUE),
+    nonfamily_households_2022 = sum(nonfamily_households_2022, na.rm = TRUE),
+    households_with_children_2022 = sum(households_with_children_2022, na.rm = TRUE),
+
+    # Health
+    disabled_population_2022 = sum(disabled_population_2022, na.rm = TRUE),
+
+    # Housing
+    total_housing_units_2022 = sum(total_housing_units_2022, na.rm = TRUE),
+    median_gross_rent_2022 = mean(median_gross_rent_2022, na.rm = TRUE),
+    median_home_value_2022 = mean(median_home_value_2022, na.rm = TRUE),
+    rent_burden_30plus_2022 = sum(rent_burden_30plus_2022, na.rm = TRUE),
+    rent_burden_50plus_2022 = sum(rent_burden_50plus_2022, na.rm = TRUE),
+    owner_occupied_units_2022 = sum(owner_occupied_units_2022, na.rm = TRUE),
+    renter_occupied_units_2022 = sum(renter_occupied_units_2022, na.rm = TRUE),
+    total_occupied_units_2022 = sum(total_occupied_units_2022, na.rm = TRUE),
+    total_vacant_units_2022 = sum(total_vacant_units_2022, na.rm = TRUE),
+    units_built_2020plus_2022 = sum(units_built_2020plus_2022, na.rm = TRUE),
+    units_built_2010_2019_2022 = sum(units_built_2010_2019_2022, na.rm = TRUE),
+    units_built_2000_2009_2022 = sum(units_built_2000_2009_2022, na.rm = TRUE),
+    overcrowded_owner_occupied_households_2022 = sum(overcrowded_owner_occupied_households_2022, na.rm = TRUE),
+    housing_before_1939_2022 = sum(housing_before_1939_2022, na.rm = TRUE),
+    households_receiving_assistance_2022 = sum(households_receiving_assistance_2022, na.rm = TRUE),
+    rent_100_below_2022 = sum(rent_100_below_2022, na.rm = TRUE),
+    rent_100_149_2022 = sum(rent_100_149_2022, na.rm = TRUE),
+    rent_150_199_2022 = sum(rent_150_199_2022, na.rm = TRUE),
+    rent_200_249_2022 = sum(rent_200_249_2022, na.rm = TRUE),
+    rent_250_299_2022 = sum(rent_250_299_2022, na.rm = TRUE),
+    rent_300_349_2022 = sum(rent_300_349_2022, na.rm = TRUE),
+    rent_350_399_2022 = sum(rent_350_399_2022, na.rm = TRUE),
+    rent_400_449_2022 = sum(rent_400_449_2022, na.rm = TRUE),
+    rent_450_499_2022 = sum(rent_450_499_2022, na.rm = TRUE),
+    rent_500_549_2022 = sum(rent_500_549_2022, na.rm = TRUE),
+    rent_550_599_2022 = sum(rent_550_599_2022, na.rm = TRUE),
+    rent_600_649_2022 = sum(rent_600_649_2022, na.rm = TRUE),
+    rent_650_699_2022 = sum(rent_650_699_2022, na.rm = TRUE),
+    rent_700_749_2022 = sum(rent_700_749_2022, na.rm = TRUE),
+    rent_750_799_2022 = sum(rent_750_799_2022, na.rm = TRUE),
+    rent_800_899_2022 = sum(rent_800_899_2022, na.rm = TRUE),
+    rent_900_999_2022 = sum(rent_900_999_2022, na.rm = TRUE),
+    rent_1000_1249_2022 = sum(rent_1000_1249_2022, na.rm = TRUE),
+    rent_1250_1499_2022 = sum(rent_1250_1499_2022, na.rm = TRUE),
+    rent_1500_1999_2022 = sum(rent_1500_1999_2022, na.rm = TRUE),
+    rent_2000_2499_2022 = sum(rent_2000_2499_2022, na.rm = TRUE),
+    rent_2500_2999_2022 = sum(rent_2500_2999_2022, na.rm = TRUE),
+    rent_3000_3499_2022 = sum(rent_3000_3499_2022, na.rm = TRUE),
+    rent_3500_plus_2022 = sum(rent_3500_plus_2022, na.rm = TRUE),
+    households_cash_rent_2022 = sum(households_cash_rent_2022, na.rm = TRUE),
+    households_no_cash_rent_2022 = sum(households_no_cash_rent_2022, na.rm = TRUE),
+
+    # Race & Ethnicity
+    white_NH_race_2022 = sum(white_NH_race_2022, na.rm = TRUE),
+    black_NH_race_2022 = sum(black_NH_race_2022, na.rm = TRUE),
+    asian_NH_race_2022 = sum(asian_NH_race_2022, na.rm = TRUE),
+    hisp_race_2022 = sum(hisp_race_2022, na.rm = TRUE),
+
+    # Transportation & Mobility
+    public_transit_users_2022 = sum(public_transit_users_2022, na.rm = TRUE),
+    mean_commute_time_2022 = mean(mean_commute_time_2022, na.rm = TRUE),
+    no_vehicle_households_2022 = sum(no_vehicle_households_2022, na.rm = TRUE),
+    commute_alone_2022 = sum(commute_alone_2022, na.rm = TRUE)
+  ) %>%
+  ungroup()  # Always ungroup after summarizing
+
+# View the final dataset
+print(newark_nbd_wide_2022)
+
+
+# Aggregate data by Neighborhood
+newark_nbd_wide_2021 <- newark_tract_wide_2021 %>%
+  group_by(Neighborhood) %>%
+  summarize(
+    # Population and Demographics
+    total_population_2021 = sum(total_population_2021, na.rm = TRUE),
+    total_male_population_2021 = sum(total_male_population_2021, na.rm = TRUE),
+    total_female_population_2021 = sum(total_female_population_2021, na.rm = TRUE),
+    median_age_2021 = mean(median_age_2021, na.rm = TRUE),
+    male_median_age_2021 = mean(male_median_age_2021, na.rm = TRUE),
+    female_median_age_2021 = mean(female_median_age_2021, na.rm = TRUE),
+    recent_movers_2021 = sum(recent_movers_2021, na.rm = TRUE),
+    foreign_born_population_2021 = sum(foreign_born_population_2021, na.rm = TRUE),
+
+    # Business and Economy
+    self_employed_incorporated_2021 = sum(self_employed_incorporated_2021, na.rm = TRUE),
+    self_employed_not_incorporated_2021 = sum(self_employed_not_incorporated_2021, na.rm = TRUE),
+    employment_industry_2021 = sum(employment_industry_2021, na.rm = TRUE),
+    worker_class_2021 = sum(worker_class_2021, na.rm = TRUE),
+    median_hh_income_2021 = mean(median_hh_income_2021, na.rm = TRUE),
+    per_capita_income_2021 = mean(per_capita_income_2021, na.rm = TRUE),
+    gini_index_2021 = mean(gini_index_2021, na.rm = TRUE),
+    poverty_level_2021 = sum(poverty_level_2021, na.rm = TRUE),
+
+    # Education
+    bachelor_degree_or_higher_2021 = sum(bachelor_degree_or_higher_2021, na.rm = TRUE),
+    bachelor_male_2021 = sum(bachelor_male_2021, na.rm = TRUE),
+    masters_male_2021 = sum(masters_male_2021, na.rm = TRUE),
+    doctorate_male_2021 = sum(doctorate_male_2021, na.rm = TRUE),
+    bachelor_female_2021 = sum(bachelor_female_2021, na.rm = TRUE),
+    masters_female_2021 = sum(masters_female_2021, na.rm = TRUE),
+    doctorate_female_2021 = sum(doctorate_female_2021, na.rm = TRUE),
+    professional_degree_male_2021 = sum(professional_degree_male_2021, na.rm = TRUE),
+    professional_degree_female_2021 = sum(professional_degree_female_2021, na.rm = TRUE),
+    educational_attainment_total_2021 = sum(educational_attainment_total_2021, na.rm = TRUE),
+    highschool_dropout_2021 = sum(highschool_dropout_2021, na.rm = TRUE),
+
+    # Employment
+    total_labor_force_2021 = sum(total_labor_force_2021, na.rm = TRUE),
+    total_employed_2021 = sum(total_employed_2021, na.rm = TRUE),
+    total_unemployed_2021 = sum(total_unemployed_2021, na.rm = TRUE),
+    remote_workers_2021 = sum(remote_workers_2021, na.rm = TRUE),
+    service_industry_2021 = sum(service_industry_2021, na.rm = TRUE),
+    mgmt_business_sc_arts_industry_2021 = sum(mgmt_business_sc_arts_industry_2021, na.rm = TRUE),
+
+    # Families and Living Arrangements
+    total_households_2021 = sum(total_households_2021, na.rm = TRUE),
+    family_households_2021 = sum(family_households_2021, na.rm = TRUE),
+    nonfamily_households_2021 = sum(nonfamily_households_2021, na.rm = TRUE),
+    households_with_children_2021 = sum(households_with_children_2021, na.rm = TRUE),
+
+    # Health
+    disabled_population_2021 = sum(disabled_population_2021, na.rm = TRUE),
+
+    # Housing
+    total_housing_units_2021 = sum(total_housing_units_2021, na.rm = TRUE),
+    median_gross_rent_2021 = mean(median_gross_rent_2021, na.rm = TRUE),
+    median_home_value_2021 = mean(median_home_value_2021, na.rm = TRUE),
+    rent_burden_30plus_2021 = sum(rent_burden_30plus_2021, na.rm = TRUE),
+    rent_burden_50plus_2021 = sum(rent_burden_50plus_2021, na.rm = TRUE),
+    owner_occupied_units_2021 = sum(owner_occupied_units_2021, na.rm = TRUE),
+    renter_occupied_units_2021 = sum(renter_occupied_units_2021, na.rm = TRUE),
+    total_occupied_units_2021 = sum(total_occupied_units_2021, na.rm = TRUE),
+    total_vacant_units_2021 = sum(total_vacant_units_2021, na.rm = TRUE),
+    units_built_2020plus_2021 = sum(units_built_2020plus_2021, na.rm = TRUE),
+units_built_2010_2019_2021 = sum(units_built_2010_2019_2021, na.rm = TRUE),
+units_built_2000_2009_2021 = sum(units_built_2000_2009_2021, na.rm = TRUE),
+overcrowded_owner_occupied_households_2021 = sum(overcrowded_owner_occupied_households_2021, na.rm = TRUE),
+housing_before_1939_2021 = sum(housing_before_1939_2021, na.rm = TRUE),
+households_receiving_assistance_2021 = sum(households_receiving_assistance_2021, na.rm = TRUE),
+rent_100_below_2021 = sum(rent_100_below_2021, na.rm = TRUE),
+rent_100_149_2021 = sum(rent_100_149_2021, na.rm = TRUE),
+rent_150_199_2021 = sum(rent_150_199_2021, na.rm = TRUE),
+rent_200_249_2021 = sum(rent_200_249_2021, na.rm = TRUE),
+rent_250_299_2021 = sum(rent_250_299_2021, na.rm = TRUE),
+rent_300_349_2021 = sum(rent_300_349_2021, na.rm = TRUE),
+rent_350_399_2021 = sum(rent_350_399_2021, na.rm = TRUE),
+rent_400_449_2021 = sum(rent_400_449_2021, na.rm = TRUE),
+rent_450_499_2021 = sum(rent_450_499_2021, na.rm = TRUE),
+rent_500_549_2021 = sum(rent_500_549_2021, na.rm = TRUE),
+rent_550_599_2021 = sum(rent_550_599_2021, na.rm = TRUE),
+rent_600_649_2021 = sum(rent_600_649_2021, na.rm = TRUE),
+rent_650_699_2021 = sum(rent_650_699_2021, na.rm = TRUE),
+rent_700_749_2021 = sum(rent_700_749_2021, na.rm = TRUE),
+rent_750_799_2021 = sum(rent_750_799_2021, na.rm = TRUE),
+rent_800_899_2021 = sum(rent_800_899_2021, na.rm = TRUE),
+rent_900_999_2021 = sum(rent_900_999_2021, na.rm = TRUE),
+rent_1000_1249_2021 = sum(rent_1000_1249_2021, na.rm = TRUE),
+rent_1250_1499_2021 = sum(rent_1250_1499_2021, na.rm = TRUE),
+rent_1500_1999_2021 = sum(rent_1500_1999_2021, na.rm = TRUE),
+rent_2000_2499_2021 = sum(rent_2000_2499_2021, na.rm = TRUE),
+rent_2500_2999_2021 = sum(rent_2500_2999_2021, na.rm = TRUE),
+rent_3000_3499_2021 = sum(rent_3000_3499_2021, na.rm = TRUE),
+rent_3500_plus_2021 = sum(rent_3500_plus_2021, na.rm = TRUE),
+households_cash_rent_2021 = sum(households_cash_rent_2021, na.rm = TRUE),
+households_no_cash_rent_2021 = sum(households_no_cash_rent_2021, na.rm = TRUE),
+
+
+    # Race & Ethnicity
+    white_NH_race_2021 = sum(white_NH_race_2021, na.rm = TRUE),
+    black_NH_race_2021 = sum(black_NH_race_2021, na.rm = TRUE),
+    asian_NH_race_2021 = sum(asian_NH_race_2021, na.rm = TRUE),
+    hisp_race_2021 = sum(hisp_race_2021, na.rm = TRUE),
+
+    # Transportation & Mobility
+    public_transit_users_2021 = sum(public_transit_users_2021, na.rm = TRUE),
+    mean_commute_time_2021 = mean(mean_commute_time_2021, na.rm = TRUE),
+    no_vehicle_households_2021 = sum(no_vehicle_households_2021, na.rm = TRUE),
+    commute_alone_2021 = sum(commute_alone_2021, na.rm = TRUE)
+  ) %>%
+  ungroup()  # Always ungroup after summarizing
+
+# View the final dataset
+print(newark_nbd_wide_2021)
+
+
+# Aggregate data by Neighborhood
+newark_nbd_wide_2020 <- newark_tract_wide_2020 %>%
+  group_by(Neighborhood) %>%
+  summarize(
+    # Population and Demographics
+    total_population_2020 = sum(total_population_2020, na.rm = TRUE),
+    total_male_population_2020 = sum(total_male_population_2020, na.rm = TRUE),
+    total_female_population_2020 = sum(total_female_population_2020, na.rm = TRUE),
+    median_age_2020 = mean(median_age_2020, na.rm = TRUE),
+    male_median_age_2020 = mean(male_median_age_2020, na.rm = TRUE),
+    female_median_age_2020 = mean(female_median_age_2020, na.rm = TRUE),
+    recent_movers_2020 = sum(recent_movers_2020, na.rm = TRUE),
+    foreign_born_population_2020 = sum(foreign_born_population_2020, na.rm = TRUE),
+
+    # Business and Economy
+    self_employed_incorporated_2020 = sum(self_employed_incorporated_2020, na.rm = TRUE),
+    self_employed_not_incorporated_2020 = sum(self_employed_not_incorporated_2020, na.rm = TRUE),
+    employment_industry_2020 = sum(employment_industry_2020, na.rm = TRUE),
+    worker_class_2020 = sum(worker_class_2020, na.rm = TRUE),
+    median_hh_income_2020 = mean(median_hh_income_2020, na.rm = TRUE),
+    per_capita_income_2020 = mean(per_capita_income_2020, na.rm = TRUE),
+    gini_index_2020 = mean(gini_index_2020, na.rm = TRUE),
+    poverty_level_2020 = sum(poverty_level_2020, na.rm = TRUE),
+
+    # Education
+    bachelor_degree_or_higher_2020 = sum(bachelor_degree_or_higher_2020, na.rm = TRUE),
+    bachelor_male_2020 = sum(bachelor_male_2020, na.rm = TRUE),
+    masters_male_2020 = sum(masters_male_2020, na.rm = TRUE),
+    doctorate_male_2020 = sum(doctorate_male_2020, na.rm = TRUE),
+    bachelor_female_2020 = sum(bachelor_female_2020, na.rm = TRUE),
+    masters_female_2020 = sum(masters_female_2020, na.rm = TRUE),
+    doctorate_female_2020 = sum(doctorate_female_2020, na.rm = TRUE),
+    professional_degree_male_2020 = sum(professional_degree_male_2020, na.rm = TRUE),
+    professional_degree_female_2020 = sum(professional_degree_female_2020, na.rm = TRUE),
+    educational_attainment_total_2020 = sum(educational_attainment_total_2020, na.rm = TRUE),
+    highschool_dropout_2020 = sum(highschool_dropout_2020, na.rm = TRUE),
+
+    # Employment
+    total_labor_force_2020 = sum(total_labor_force_2020, na.rm = TRUE),
+    total_employed_2020 = sum(total_employed_2020, na.rm = TRUE),
+    total_unemployed_2020 = sum(total_unemployed_2020, na.rm = TRUE),
+    remote_workers_2020 = sum(remote_workers_2020, na.rm = TRUE),
+    service_industry_2020 = sum(service_industry_2020, na.rm = TRUE),
+    mgmt_business_sc_arts_industry_2020 = sum(mgmt_business_sc_arts_industry_2020, na.rm = TRUE),
+
+    # Families and Living Arrangements
+    total_households_2020 = sum(total_households_2020, na.rm = TRUE),
+    family_households_2020 = sum(family_households_2020, na.rm = TRUE),
+    nonfamily_households_2020 = sum(nonfamily_households_2020, na.rm = TRUE),
+    households_with_children_2020 = sum(households_with_children_2020, na.rm = TRUE),
+
+    # Health
+    disabled_population_2020 = sum(disabled_population_2020, na.rm = TRUE),
+
+    # Housing
+    total_housing_units_2020 = sum(total_housing_units_2020, na.rm = TRUE),
+    median_gross_rent_2020 = mean(median_gross_rent_2020, na.rm = TRUE),
+    median_home_value_2020 = mean(median_home_value_2020, na.rm = TRUE),
+    rent_burden_30plus_2020 = sum(rent_burden_30plus_2020, na.rm = TRUE),
+    rent_burden_50plus_2020 = sum(rent_burden_50plus_2020, na.rm = TRUE),
+    owner_occupied_units_2020 = sum(owner_occupied_units_2020, na.rm = TRUE),
+    renter_occupied_units_2020 = sum(renter_occupied_units_2020, na.rm = TRUE),
+    total_occupied_units_2020 = sum(total_occupied_units_2020, na.rm = TRUE),
+    total_vacant_units_2020 = sum(total_vacant_units_2020, na.rm = TRUE),
+    units_built_2020plus_2020 = sum(units_built_2020plus_2020, na.rm = TRUE),
+units_built_2010_2019_2020 = sum(units_built_2010_2019_2020, na.rm = TRUE),
+units_built_2000_2009_2020 = sum(units_built_2000_2009_2020, na.rm = TRUE),
+overcrowded_owner_occupied_households_2020 = sum(overcrowded_owner_occupied_households_2020, na.rm = TRUE),
+housing_before_1939_2020 = sum(housing_before_1939_2020, na.rm = TRUE),
+households_receiving_assistance_2020 = sum(households_receiving_assistance_2020, na.rm = TRUE),
+rent_100_below_2020 = sum(rent_100_below_2020, na.rm = TRUE),
+rent_100_149_2020 = sum(rent_100_149_2020, na.rm = TRUE),
+rent_150_199_2020 = sum(rent_150_199_2020, na.rm = TRUE),
+rent_200_249_2020 = sum(rent_200_249_2020, na.rm = TRUE),
+rent_250_299_2020 = sum(rent_250_299_2020, na.rm = TRUE),
+rent_300_349_2020 = sum(rent_300_349_2020, na.rm = TRUE),
+rent_350_399_2020 = sum(rent_350_399_2020, na.rm = TRUE),
+rent_400_449_2020 = sum(rent_400_449_2020, na.rm = TRUE),
+rent_450_499_2020 = sum(rent_450_499_2020, na.rm = TRUE),
+rent_500_549_2020 = sum(rent_500_549_2020, na.rm = TRUE),
+rent_550_599_2020 = sum(rent_550_599_2020, na.rm = TRUE),
+rent_600_649_2020 = sum(rent_600_649_2020, na.rm = TRUE),
+rent_650_699_2020 = sum(rent_650_699_2020, na.rm = TRUE),
+rent_700_749_2020 = sum(rent_700_749_2020, na.rm = TRUE),
+rent_750_799_2020 = sum(rent_750_799_2020, na.rm = TRUE),
+rent_800_899_2020 = sum(rent_800_899_2020, na.rm = TRUE),
+rent_900_999_2020 = sum(rent_900_999_2020, na.rm = TRUE),
+rent_1000_1249_2020 = sum(rent_1000_1249_2020, na.rm = TRUE),
+rent_1250_1499_2020 = sum(rent_1250_1499_2020, na.rm = TRUE),
+rent_1500_1999_2020 = sum(rent_1500_1999_2020, na.rm = TRUE),
+rent_2000_2499_2020 = sum(rent_2000_2499_2020, na.rm = TRUE),
+rent_2500_2999_2020 = sum(rent_2500_2999_2020, na.rm = TRUE),
+rent_3000_3499_2020 = sum(rent_3000_3499_2020, na.rm = TRUE),
+rent_3500_plus_2020 = sum(rent_3500_plus_2020, na.rm = TRUE),
+households_cash_rent_2020 = sum(households_cash_rent_2020, na.rm = TRUE),
+households_no_cash_rent_2020 = sum(households_no_cash_rent_2020, na.rm = TRUE),
+
+    # Race & Ethnicity
+    white_NH_race_2020 = sum(white_NH_race_2020, na.rm = TRUE),
+    black_NH_race_2020 = sum(black_NH_race_2020, na.rm = TRUE),
+    asian_NH_race_2020 = sum(asian_NH_race_2020, na.rm = TRUE),
+    hisp_race_2020 = sum(hisp_race_2020, na.rm = TRUE),
+
+    # Transportation & Mobility
+    public_transit_users_2020 = sum(public_transit_users_2020, na.rm = TRUE),
+    mean_commute_time_2020 = mean(mean_commute_time_2020, na.rm = TRUE),
+    no_vehicle_households_2020 = sum(no_vehicle_households_2020, na.rm = TRUE),
+    commute_alone_2020 = sum(commute_alone_2020, na.rm = TRUE)
+  ) %>%
+  ungroup()  # Always ungroup after summarizing
+
+# View the final dataset
+print(newark_nbd_wide_2020)
+
+
+# Aggregate data by Neighborhood
+newark_nbd_wide_2019 <- newark_tract_wide_2019 %>%
+  group_by(Neighborhood) %>%
+  summarize(
+    # Population and Demographics
+    total_population_2019 = sum(total_population_2019, na.rm = TRUE),
+    total_male_population_2019 = sum(total_male_population_2019, na.rm = TRUE),
+    total_female_population_2019 = sum(total_female_population_2019, na.rm = TRUE),
+    median_age_2019 = mean(median_age_2019, na.rm = TRUE),
+    male_median_age_2019 = mean(male_median_age_2019, na.rm = TRUE),
+    female_median_age_2019 = mean(female_median_age_2019, na.rm = TRUE),
+    recent_movers_2019 = sum(recent_movers_2019, na.rm = TRUE),
+    foreign_born_population_2019 = sum(foreign_born_population_2019, na.rm = TRUE),
+
+    # Business and Economy
+    self_employed_incorporated_2019 = sum(self_employed_incorporated_2019, na.rm = TRUE),
+    self_employed_not_incorporated_2019 = sum(self_employed_not_incorporated_2019, na.rm = TRUE),
+    employment_industry_2019 = sum(employment_industry_2019, na.rm = TRUE),
+    worker_class_2019 = sum(worker_class_2019, na.rm = TRUE),
+    median_hh_income_2019 = mean(median_hh_income_2019, na.rm = TRUE),
+    per_capita_income_2019 = mean(per_capita_income_2019, na.rm = TRUE),
+    gini_index_2019 = mean(gini_index_2019, na.rm = TRUE),
+    poverty_level_2019 = sum(poverty_level_2019, na.rm = TRUE),
+
+    # Education
+    bachelor_degree_or_higher_2019 = sum(bachelor_degree_or_higher_2019, na.rm = TRUE),
+    bachelor_male_2019 = sum(bachelor_male_2019, na.rm = TRUE),
+    masters_male_2019 = sum(masters_male_2019, na.rm = TRUE),
+    doctorate_male_2019 = sum(doctorate_male_2019, na.rm = TRUE),
+    bachelor_female_2019 = sum(bachelor_female_2019, na.rm = TRUE),
+    masters_female_2019 = sum(masters_female_2019, na.rm = TRUE),
+    doctorate_female_2019 = sum(doctorate_female_2019, na.rm = TRUE),
+    professional_degree_male_2019 = sum(professional_degree_male_2019, na.rm = TRUE),
+    professional_degree_female_2019 = sum(professional_degree_female_2019, na.rm = TRUE),
+    educational_attainment_total_2019 = sum(educational_attainment_total_2019, na.rm = TRUE),
+    highschool_dropout_2019 = sum(highschool_dropout_2019, na.rm = TRUE),
+
+    # Employment
+    total_labor_force_2019 = sum(total_labor_force_2019, na.rm = TRUE),
+    total_employed_2019 = sum(total_employed_2019, na.rm = TRUE),
+    total_unemployed_2019 = sum(total_unemployed_2019, na.rm = TRUE),
+    remote_workers_2019 = sum(remote_workers_2019, na.rm = TRUE),
+    service_industry_2019 = sum(service_industry_2019, na.rm = TRUE),
+    mgmt_business_sc_arts_industry_2019 = sum(mgmt_business_sc_arts_industry_2019, na.rm = TRUE),
+
+    # Families and Living Arrangements
+    total_households_2019 = sum(total_households_2019, na.rm = TRUE),
+    family_households_2019 = sum(family_households_2019, na.rm = TRUE),
+    nonfamily_households_2019 = sum(nonfamily_households_2019, na.rm = TRUE),
+    households_with_children_2019 = sum(households_with_children_2019, na.rm = TRUE),
+
+    # Health
+    disabled_population_2019 = sum(disabled_population_2019, na.rm = TRUE),
+
+    # Housing
+    total_housing_units_2019 = sum(total_housing_units_2019, na.rm = TRUE),
+    median_gross_rent_2019 = mean(median_gross_rent_2019, na.rm = TRUE),
+    median_home_value_2019 = mean(median_home_value_2019, na.rm = TRUE),
+    rent_burden_30plus_2019 = sum(rent_burden_30plus_2019, na.rm = TRUE),
+    rent_burden_50plus_2019 = sum(rent_burden_50plus_2019, na.rm = TRUE),
+    owner_occupied_units_2019 = sum(owner_occupied_units_2019, na.rm = TRUE),
+    renter_occupied_units_2019 = sum(renter_occupied_units_2019, na.rm = TRUE),
+    total_occupied_units_2019 = sum(total_occupied_units_2019, na.rm = TRUE),
+    total_vacant_units_2019 = sum(total_vacant_units_2019, na.rm = TRUE),
+    units_built_2020plus_2019 = sum(units_built_2020plus_2019, na.rm = TRUE),
+units_built_2010_2019_2019 = sum(units_built_2010_2019_2019, na.rm = TRUE),
+units_built_2000_2009_2019 = sum(units_built_2000_2009_2019, na.rm = TRUE),
+overcrowded_owner_occupied_households_2019 = sum(overcrowded_owner_occupied_households_2019, na.rm = TRUE),
+housing_before_1939_2019 = sum(housing_before_1939_2019, na.rm = TRUE),
+households_receiving_assistance_2019 = sum(households_receiving_assistance_2019, na.rm = TRUE),
+rent_100_below_2019 = sum(rent_100_below_2019, na.rm = TRUE),
+rent_100_149_2019 = sum(rent_100_149_2019, na.rm = TRUE),
+rent_150_199_2019 = sum(rent_150_199_2019, na.rm = TRUE),
+rent_200_249_2019 = sum(rent_200_249_2019, na.rm = TRUE),
+rent_250_299_2019 = sum(rent_250_299_2019, na.rm = TRUE),
+rent_300_349_2019 = sum(rent_300_349_2019, na.rm = TRUE),
+rent_350_399_2019 = sum(rent_350_399_2019, na.rm = TRUE),
+rent_400_449_2019 = sum(rent_400_449_2019, na.rm = TRUE),
+rent_450_499_2019 = sum(rent_450_499_2019, na.rm = TRUE),
+rent_500_549_2019 = sum(rent_500_549_2019, na.rm = TRUE),
+rent_550_599_2019 = sum(rent_550_599_2019, na.rm = TRUE),
+rent_600_649_2019 = sum(rent_600_649_2019, na.rm = TRUE),
+rent_650_699_2019 = sum(rent_650_699_2019, na.rm = TRUE),
+rent_700_749_2019 = sum(rent_700_749_2019, na.rm = TRUE),
+rent_750_799_2019 = sum(rent_750_799_2019, na.rm = TRUE),
+rent_800_899_2019 = sum(rent_800_899_2019, na.rm = TRUE),
+rent_900_999_2019 = sum(rent_900_999_2019, na.rm = TRUE),
+rent_1000_1249_2019 = sum(rent_1000_1249_2019, na.rm = TRUE),
+rent_1250_1499_2019 = sum(rent_1250_1499_2019, na.rm = TRUE),
+rent_1500_1999_2019 = sum(rent_1500_1999_2019, na.rm = TRUE),
+rent_2000_2499_2019 = sum(rent_2000_2499_2019, na.rm = TRUE),
+rent_2500_2999_2019 = sum(rent_2500_2999_2019, na.rm = TRUE),
+rent_3000_3499_2019 = sum(rent_3000_3499_2019, na.rm = TRUE),
+rent_3500_plus_2019 = sum(rent_3500_plus_2019, na.rm = TRUE),
+households_cash_rent_2019 = sum(households_cash_rent_2019, na.rm = TRUE),
+households_no_cash_rent_2019 = sum(households_no_cash_rent_2019, na.rm = TRUE),
+
+
+    # Race & Ethnicity
+    white_NH_race_2019 = sum(white_NH_race_2019, na.rm = TRUE),
+    black_NH_race_2019 = sum(black_NH_race_2019, na.rm = TRUE),
+    asian_NH_race_2019 = sum(asian_NH_race_2019, na.rm = TRUE),
+    hisp_race_2019 = sum(hisp_race_2019, na.rm = TRUE),
+
+    # Transportation & Mobility
+    public_transit_users_2019 = sum(public_transit_users_2019, na.rm = TRUE),
+    mean_commute_time_2019 = mean(mean_commute_time_2019, na.rm = TRUE),
+    no_vehicle_households_2019 = sum(no_vehicle_households_2019, na.rm = TRUE),
+    commute_alone_2019 = sum(commute_alone_2019, na.rm = TRUE)
+  ) %>%
+  ungroup()  # Always ungroup after summarizing
+
+# View the final dataset
+print(newark_nbd_wide_2019)
+
+
+# Aggregate data by Neighborhood
+newark_nbd_wide_2018 <- newark_tract_wide_2018 %>%
+  group_by(Neighborhood) %>%
+  summarize(
+    # Population and Demographics
+    total_population_2018 = sum(total_population_2018, na.rm = TRUE),
+    total_male_population_2018 = sum(total_male_population_2018, na.rm = TRUE),
+    total_female_population_2018 = sum(total_female_population_2018, na.rm = TRUE),
+    median_age_2018 = mean(median_age_2018, na.rm = TRUE),
+    male_median_age_2018 = mean(male_median_age_2018, na.rm = TRUE),
+    female_median_age_2018 = mean(female_median_age_2018, na.rm = TRUE),
+    recent_movers_2018 = sum(recent_movers_2018, na.rm = TRUE),
+    foreign_born_population_2018 = sum(foreign_born_population_2018, na.rm = TRUE),
+
+    # Business and Economy
+    self_employed_incorporated_2018 = sum(self_employed_incorporated_2018, na.rm = TRUE),
+    self_employed_not_incorporated_2018 = sum(self_employed_not_incorporated_2018, na.rm = TRUE),
+    employment_industry_2018 = sum(employment_industry_2018, na.rm = TRUE),
+    worker_class_2018 = sum(worker_class_2018, na.rm = TRUE),
+    median_hh_income_2018 = mean(median_hh_income_2018, na.rm = TRUE),
+    per_capita_income_2018 = mean(per_capita_income_2018, na.rm = TRUE),
+    gini_index_2018 = mean(gini_index_2018, na.rm = TRUE),
+    poverty_level_2018 = sum(poverty_level_2018, na.rm = TRUE),
+
+    # Education
+    bachelor_degree_or_higher_2018 = sum(bachelor_degree_or_higher_2018, na.rm = TRUE),
+    bachelor_male_2018 = sum(bachelor_male_2018, na.rm = TRUE),
+    masters_male_2018 = sum(masters_male_2018, na.rm = TRUE),
+    doctorate_male_2018 = sum(doctorate_male_2018, na.rm = TRUE),
+    bachelor_female_2018 = sum(bachelor_female_2018, na.rm = TRUE),
+    masters_female_2018 = sum(masters_female_2018, na.rm = TRUE),
+    doctorate_female_2018 = sum(doctorate_female_2018, na.rm = TRUE),
+    professional_degree_male_2018 = sum(professional_degree_male_2018, na.rm = TRUE),
+    professional_degree_female_2018 = sum(professional_degree_female_2018, na.rm = TRUE),
+    educational_attainment_total_2018 = sum(educational_attainment_total_2018, na.rm = TRUE),
+    highschool_dropout_2018 = sum(highschool_dropout_2018, na.rm = TRUE),
+
+    # Employment
+    total_labor_force_2018 = sum(total_labor_force_2018, na.rm = TRUE),
+    total_employed_2018 = sum(total_employed_2018, na.rm = TRUE),
+    total_unemployed_2018 = sum(total_unemployed_2018, na.rm = TRUE),
+    remote_workers_2018 = sum(remote_workers_2018, na.rm = TRUE),
+    service_industry_2018 = sum(service_industry_2018, na.rm = TRUE),
+    mgmt_business_sc_arts_industry_2018 = sum(mgmt_business_sc_arts_industry_2018, na.rm = TRUE),
+
+    # Families and Living Arrangements
+    total_households_2018 = sum(total_households_2018, na.rm = TRUE),
+    family_households_2018 = sum(family_households_2018, na.rm = TRUE),
+    nonfamily_households_2018 = sum(nonfamily_households_2018, na.rm = TRUE),
+    households_with_children_2018 = sum(households_with_children_2018, na.rm = TRUE),
+
+    # Health
+    disabled_population_2018 = sum(disabled_population_2018, na.rm = TRUE),
+
+    # Housing
+    total_housing_units_2018 = sum(total_housing_units_2018, na.rm = TRUE),
+    median_gross_rent_2018 = mean(median_gross_rent_2018, na.rm = TRUE),
+    median_home_value_2018 = mean(median_home_value_2018, na.rm = TRUE),
+    rent_burden_30plus_2018 = sum(rent_burden_30plus_2018, na.rm = TRUE),
+    rent_burden_50plus_2018 = sum(rent_burden_50plus_2018, na.rm = TRUE),
+    owner_occupied_units_2018 = sum(owner_occupied_units_2018, na.rm = TRUE),
+    renter_occupied_units_2018 = sum(renter_occupied_units_2018, na.rm = TRUE),
+    total_occupied_units_2018 = sum(total_occupied_units_2018, na.rm = TRUE),
+    total_vacant_units_2018 = sum(total_vacant_units_2018, na.rm = TRUE),
+    units_built_2020plus_2018 = sum(units_built_2020plus_2018, na.rm = TRUE),
+overcrowded_owner_occupied_households_2018 = sum(overcrowded_owner_occupied_households_2018, na.rm = TRUE),
+housing_before_1939_2018 = sum(housing_before_1939_2018, na.rm = TRUE),
+households_receiving_assistance_2018 = sum(households_receiving_assistance_2018, na.rm = TRUE),
+rent_100_below_2018 = sum(rent_100_below_2018, na.rm = TRUE),
+rent_100_149_2018 = sum(rent_100_149_2018, na.rm = TRUE),
+rent_150_199_2018 = sum(rent_150_199_2018, na.rm = TRUE),
+rent_200_249_2018 = sum(rent_200_249_2018, na.rm = TRUE),
+rent_250_299_2018 = sum(rent_250_299_2018, na.rm = TRUE),
+rent_300_349_2018 = sum(rent_300_349_2018, na.rm = TRUE),
+rent_350_399_2018 = sum(rent_350_399_2018, na.rm = TRUE),
+rent_400_449_2018 = sum(rent_400_449_2018, na.rm = TRUE),
+rent_450_499_2018 = sum(rent_450_499_2018, na.rm = TRUE),
+rent_500_549_2018 = sum(rent_500_549_2018, na.rm = TRUE),
+rent_550_599_2018 = sum(rent_550_599_2018, na.rm = TRUE),
+rent_600_649_2018 = sum(rent_600_649_2018, na.rm = TRUE),
+rent_650_699_2018 = sum(rent_650_699_2018, na.rm = TRUE),
+rent_700_749_2018 = sum(rent_700_749_2018, na.rm = TRUE),
+rent_750_799_2018 = sum(rent_750_799_2018, na.rm = TRUE),
+rent_800_899_2018 = sum(rent_800_899_2018, na.rm = TRUE),
+rent_900_999_2018 = sum(rent_900_999_2018, na.rm = TRUE),
+rent_1000_1249_2018 = sum(rent_1000_1249_2018, na.rm = TRUE),
+rent_1250_1499_2018 = sum(rent_1250_1499_2018, na.rm = TRUE),
+rent_1500_1999_2018 = sum(rent_1500_1999_2018, na.rm = TRUE),
+rent_2000_2499_2018 = sum(rent_2000_2499_2018, na.rm = TRUE),
+rent_2500_2999_2018 = sum(rent_2500_2999_2018, na.rm = TRUE),
+rent_3000_3499_2018 = sum(rent_3000_3499_2018, na.rm = TRUE),
+rent_3500_plus_2018 = sum(rent_3500_plus_2018, na.rm = TRUE),
+households_cash_rent_2018 = sum(households_cash_rent_2018, na.rm = TRUE),
+households_no_cash_rent_2018 = sum(households_no_cash_rent_2018, na.rm = TRUE),
+
+
+    # Race & Ethnicity
+    white_NH_race_2018 = sum(white_NH_race_2018, na.rm = TRUE),
+    black_NH_race_2018 = sum(black_NH_race_2018, na.rm = TRUE),
+    asian_NH_race_2018 = sum(asian_NH_race_2018, na.rm = TRUE),
+    hisp_race_2018 = sum(hisp_race_2018, na.rm = TRUE),
+
+    # Transportation & Mobility
+    public_transit_users_2018 = sum(public_transit_users_2018, na.rm = TRUE),
+    mean_commute_time_2018 = mean(mean_commute_time_2018, na.rm = TRUE),
+    no_vehicle_households_2018 = sum(no_vehicle_households_2018, na.rm = TRUE),
+    commute_alone_2018 = sum(commute_alone_2018, na.rm = TRUE)
+  ) %>%
+  ungroup()  # Always ungroup after summarizing
+
+# View the final dataset
+print(newark_nbd_wide_2018)
+
+
+
+# Aggregate data by Neighborhood
+newark_nbd_wide_2017 <- newark_tract_wide_2017 %>%
+  group_by(Neighborhood) %>%
+  summarize(
+    # Population and Demographics
+    total_population_2017 = sum(total_population_2017, na.rm = TRUE),
+    total_male_population_2017 = sum(total_male_population_2017, na.rm = TRUE),
+    total_female_population_2017 = sum(total_female_population_2017, na.rm = TRUE),
+    median_age_2017 = mean(median_age_2017, na.rm = TRUE),
+    male_median_age_2017 = mean(male_median_age_2017, na.rm = TRUE),
+    female_median_age_2017 = mean(female_median_age_2017, na.rm = TRUE),
+    recent_movers_2017 = sum(recent_movers_2017, na.rm = TRUE),
+    foreign_born_population_2017 = sum(foreign_born_population_2017, na.rm = TRUE),
+
+    # Business and Economy
+    self_employed_incorporated_2017 = sum(self_employed_incorporated_2017, na.rm = TRUE),
+    self_employed_not_incorporated_2017 = sum(self_employed_not_incorporated_2017, na.rm = TRUE),
+    employment_industry_2017 = sum(employment_industry_2017, na.rm = TRUE),
+    worker_class_2017 = sum(worker_class_2017, na.rm = TRUE),
+    median_hh_income_2017 = mean(median_hh_income_2017, na.rm = TRUE),
+    per_capita_income_2017 = mean(per_capita_income_2017, na.rm = TRUE),
+    gini_index_2017 = mean(gini_index_2017, na.rm = TRUE),
+    poverty_level_2017 = sum(poverty_level_2017, na.rm = TRUE),
+
+    # Education
+    bachelor_degree_or_higher_2017 = sum(bachelor_degree_or_higher_2017, na.rm = TRUE),
+    bachelor_male_2017 = sum(bachelor_male_2017, na.rm = TRUE),
+    masters_male_2017 = sum(masters_male_2017, na.rm = TRUE),
+    doctorate_male_2017 = sum(doctorate_male_2017, na.rm = TRUE),
+    bachelor_female_2017 = sum(bachelor_female_2017, na.rm = TRUE),
+    masters_female_2017 = sum(masters_female_2017, na.rm = TRUE),
+    doctorate_female_2017 = sum(doctorate_female_2017, na.rm = TRUE),
+    professional_degree_male_2017 = sum(professional_degree_male_2017, na.rm = TRUE),
+    professional_degree_female_2017 = sum(professional_degree_female_2017, na.rm = TRUE),
+    educational_attainment_total_2017 = sum(educational_attainment_total_2017, na.rm = TRUE),
+    highschool_dropout_2017 = sum(highschool_dropout_2017, na.rm = TRUE),
+
+    # Employment
+    total_labor_force_2017 = sum(total_labor_force_2017, na.rm = TRUE),
+    total_employed_2017 = sum(total_employed_2017, na.rm = TRUE),
+    total_unemployed_2017 = sum(total_unemployed_2017, na.rm = TRUE),
+    remote_workers_2017 = sum(remote_workers_2017, na.rm = TRUE),
+    service_industry_2017 = sum(service_industry_2017, na.rm = TRUE),
+    mgmt_business_sc_arts_industry_2017 = sum(mgmt_business_sc_arts_industry_2017, na.rm = TRUE),
+
+    # Families and Living Arrangements
+    total_households_2017 = sum(total_households_2017, na.rm = TRUE),
+    family_households_2017 = sum(family_households_2017, na.rm = TRUE),
+    nonfamily_households_2017 = sum(nonfamily_households_2017, na.rm = TRUE),
+    households_with_children_2017 = sum(households_with_children_2017, na.rm = TRUE),
+
+    # Health
+    disabled_population_2017 = sum(disabled_population_2017, na.rm = TRUE),
+
+    # Housing
+    total_housing_units_2017 = sum(total_housing_units_2017, na.rm = TRUE),
+    median_gross_rent_2017 = mean(median_gross_rent_2017, na.rm = TRUE),
+    median_home_value_2017 = mean(median_home_value_2017, na.rm = TRUE),
+    rent_burden_30plus_2017 = sum(rent_burden_30plus_2017, na.rm = TRUE),
+    rent_burden_50plus_2017 = sum(rent_burden_50plus_2017, na.rm = TRUE),
+    owner_occupied_units_2017 = sum(owner_occupied_units_2017, na.rm = TRUE),
+    renter_occupied_units_2017 = sum(renter_occupied_units_2017, na.rm = TRUE),
+    total_occupied_units_2017 = sum(total_occupied_units_2017, na.rm = TRUE),
+    total_vacant_units_2017 = sum(total_vacant_units_2017, na.rm = TRUE),
+    units_built_2020plus_2017 = sum(units_built_2020plus_2017, na.rm = TRUE),
+overcrowded_owner_occupied_households_2017 = sum(overcrowded_owner_occupied_households_2017, na.rm = TRUE),
+housing_before_1939_2017 = sum(housing_before_1939_2017, na.rm = TRUE),
+households_receiving_assistance_2017 = sum(households_receiving_assistance_2017, na.rm = TRUE),
+rent_100_below_2017 = sum(rent_100_below_2017, na.rm = TRUE),
+rent_100_149_2017 = sum(rent_100_149_2017, na.rm = TRUE),
+rent_150_199_2017 = sum(rent_150_199_2017, na.rm = TRUE),
+rent_200_249_2017 = sum(rent_200_249_2017, na.rm = TRUE),
+rent_250_299_2017 = sum(rent_250_299_2017, na.rm = TRUE),
+rent_300_349_2017 = sum(rent_300_349_2017, na.rm = TRUE),
+rent_350_399_2017 = sum(rent_350_399_2017, na.rm = TRUE),
+rent_400_449_2017 = sum(rent_400_449_2017, na.rm = TRUE),
+rent_450_499_2017 = sum(rent_450_499_2017, na.rm = TRUE),
+rent_500_549_2017 = sum(rent_500_549_2017, na.rm = TRUE),
+rent_550_599_2017 = sum(rent_550_599_2017, na.rm = TRUE),
+rent_600_649_2017 = sum(rent_600_649_2017, na.rm = TRUE),
+rent_650_699_2017 = sum(rent_650_699_2017, na.rm = TRUE),
+rent_700_749_2017 = sum(rent_700_749_2017, na.rm = TRUE),
+rent_750_799_2017 = sum(rent_750_799_2017, na.rm = TRUE),
+rent_800_899_2017 = sum(rent_800_899_2017, na.rm = TRUE),
+rent_900_999_2017 = sum(rent_900_999_2017, na.rm = TRUE),
+rent_1000_1249_2017 = sum(rent_1000_1249_2017, na.rm = TRUE),
+rent_1250_1499_2017 = sum(rent_1250_1499_2017, na.rm = TRUE),
+rent_1500_1999_2017 = sum(rent_1500_1999_2017, na.rm = TRUE),
+rent_2000_2499_2017 = sum(rent_2000_2499_2017, na.rm = TRUE),
+rent_2500_2999_2017 = sum(rent_2500_2999_2017, na.rm = TRUE),
+rent_3000_3499_2017 = sum(rent_3000_3499_2017, na.rm = TRUE),
+rent_3500_plus_2017 = sum(rent_3500_plus_2017, na.rm = TRUE),
+households_cash_rent_2017 = sum(households_cash_rent_2017, na.rm = TRUE),
+households_no_cash_rent_2017 = sum(households_no_cash_rent_2017, na.rm = TRUE),
+
+
+    # Race & Ethnicity
+    white_NH_race_2017 = sum(white_NH_race_2017, na.rm = TRUE),
+    black_NH_race_2017 = sum(black_NH_race_2017, na.rm = TRUE),
+    asian_NH_race_2017 = sum(asian_NH_race_2017, na.rm = TRUE),
+    hisp_race_2017 = sum(hisp_race_2017, na.rm = TRUE),
+
+    # Transportation & Mobility
+    public_transit_users_2017 = sum(public_transit_users_2017, na.rm = TRUE),
+    mean_commute_time_2017 = mean(mean_commute_time_2017, na.rm = TRUE),
+    no_vehicle_households_2017 = sum(no_vehicle_households_2017, na.rm = TRUE),
+    commute_alone_2017 = sum(commute_alone_2017, na.rm = TRUE)
+  ) %>%
+  ungroup()  # Always ungroup after summarizing
+
+# View the final dataset
+print(newark_nbd_wide_2017)
+
+
+
+# Aggregate data by Neighborhood
+newark_nbd_wide_2016 <- newark_tract_wide_2016 %>%
+  group_by(Neighborhood) %>%
+  summarize(
+    # Population and Demographics
+    total_population_2016 = sum(total_population_2016, na.rm = TRUE),
+    total_male_population_2016 = sum(total_male_population_2016, na.rm = TRUE),
+    total_female_population_2016 = sum(total_female_population_2016, na.rm = TRUE),
+    median_age_2016 = mean(median_age_2016, na.rm = TRUE),
+    male_median_age_2016 = mean(male_median_age_2016, na.rm = TRUE),
+    female_median_age_2016 = mean(female_median_age_2016, na.rm = TRUE),
+    recent_movers_2016 = sum(recent_movers_2016, na.rm = TRUE),
+    foreign_born_population_2016 = sum(foreign_born_population_2016, na.rm = TRUE),
+
+    # Business and Economy
+    self_employed_incorporated_2016 = sum(self_employed_incorporated_2016, na.rm = TRUE),
+    self_employed_not_incorporated_2016 = sum(self_employed_not_incorporated_2016, na.rm = TRUE),
+    employment_industry_2016 = sum(employment_industry_2016, na.rm = TRUE),
+    worker_class_2016 = sum(worker_class_2016, na.rm = TRUE),
+    median_hh_income_2016 = mean(median_hh_income_2016, na.rm = TRUE),
+    per_capita_income_2016 = mean(per_capita_income_2016, na.rm = TRUE),
+    gini_index_2016 = mean(gini_index_2016, na.rm = TRUE),
+    poverty_level_2016 = sum(poverty_level_2016, na.rm = TRUE),
+
+    # Education
+    bachelor_degree_or_higher_2016 = sum(bachelor_degree_or_higher_2016, na.rm = TRUE),
+    bachelor_male_2016 = sum(bachelor_male_2016, na.rm = TRUE),
+    masters_male_2016 = sum(masters_male_2016, na.rm = TRUE),
+    doctorate_male_2016 = sum(doctorate_male_2016, na.rm = TRUE),
+    bachelor_female_2016 = sum(bachelor_female_2016, na.rm = TRUE),
+    masters_female_2016 = sum(masters_female_2016, na.rm = TRUE),
+    doctorate_female_2016 = sum(doctorate_female_2016, na.rm = TRUE),
+    professional_degree_male_2016 = sum(professional_degree_male_2016, na.rm = TRUE),
+    professional_degree_female_2016 = sum(professional_degree_female_2016, na.rm = TRUE),
+    educational_attainment_total_2016 = sum(educational_attainment_total_2016, na.rm = TRUE),
+    highschool_dropout_2016 = sum(highschool_dropout_2016, na.rm = TRUE),
+
+    # Employment
+    total_labor_force_2016 = sum(total_labor_force_2016, na.rm = TRUE),
+    total_employed_2016 = sum(total_employed_2016, na.rm = TRUE),
+    total_unemployed_2016 = sum(total_unemployed_2016, na.rm = TRUE),
+    remote_workers_2016 = sum(remote_workers_2016, na.rm = TRUE),
+    service_industry_2016 = sum(service_industry_2016, na.rm = TRUE),
+    mgmt_business_sc_arts_industry_2016 = sum(mgmt_business_sc_arts_industry_2016, na.rm = TRUE),
+
+    # Families and Living Arrangements
+    total_households_2016 = sum(total_households_2016, na.rm = TRUE),
+    family_households_2016 = sum(family_households_2016, na.rm = TRUE),
+    nonfamily_households_2016 = sum(nonfamily_households_2016, na.rm = TRUE),
+    households_with_children_2016 = sum(households_with_children_2016, na.rm = TRUE),
+
+    # Health
+    disabled_population_2016 = sum(disabled_population_2016, na.rm = TRUE),
+
+    # Housing
+    total_housing_units_2016 = sum(total_housing_units_2016, na.rm = TRUE),
+    median_gross_rent_2016 = mean(median_gross_rent_2016, na.rm = TRUE),
+    median_home_value_2016 = mean(median_home_value_2016, na.rm = TRUE),
+    rent_burden_30plus_2016 = sum(rent_burden_30plus_2016, na.rm = TRUE),
+    rent_burden_50plus_2016 = sum(rent_burden_50plus_2016, na.rm = TRUE),
+    owner_occupied_units_2016 = sum(owner_occupied_units_2016, na.rm = TRUE),
+    renter_occupied_units_2016 = sum(renter_occupied_units_2016, na.rm = TRUE),
+    total_occupied_units_2016 = sum(total_occupied_units_2016, na.rm = TRUE),
+    total_vacant_units_2016 = sum(total_vacant_units_2016, na.rm = TRUE),
+    units_built_2020plus_2016 = sum(units_built_2020plus_2016, na.rm = TRUE),
+overcrowded_owner_occupied_households_2016 = sum(overcrowded_owner_occupied_households_2016, na.rm = TRUE),
+housing_before_1939_2016 = sum(housing_before_1939_2016, na.rm = TRUE),
+households_receiving_assistance_2016 = sum(households_receiving_assistance_2016, na.rm = TRUE),
+rent_100_below_2016 = sum(rent_100_below_2016, na.rm = TRUE),
+rent_100_149_2016 = sum(rent_100_149_2016, na.rm = TRUE),
+rent_150_199_2016 = sum(rent_150_199_2016, na.rm = TRUE),
+rent_200_249_2016 = sum(rent_200_249_2016, na.rm = TRUE),
+rent_250_299_2016 = sum(rent_250_299_2016, na.rm = TRUE),
+rent_300_349_2016 = sum(rent_300_349_2016, na.rm = TRUE),
+rent_350_399_2016 = sum(rent_350_399_2016, na.rm = TRUE),
+rent_400_449_2016 = sum(rent_400_449_2016, na.rm = TRUE),
+rent_450_499_2016 = sum(rent_450_499_2016, na.rm = TRUE),
+rent_500_549_2016 = sum(rent_500_549_2016, na.rm = TRUE),
+rent_550_599_2016 = sum(rent_550_599_2016, na.rm = TRUE),
+rent_600_649_2016 = sum(rent_600_649_2016, na.rm = TRUE),
+rent_650_699_2016 = sum(rent_650_699_2016, na.rm = TRUE),
+rent_700_749_2016 = sum(rent_700_749_2016, na.rm = TRUE),
+rent_750_799_2016 = sum(rent_750_799_2016, na.rm = TRUE),
+rent_800_899_2016 = sum(rent_800_899_2016, na.rm = TRUE),
+rent_900_999_2016 = sum(rent_900_999_2016, na.rm = TRUE),
+rent_1000_1249_2016 = sum(rent_1000_1249_2016, na.rm = TRUE),
+rent_1250_1499_2016 = sum(rent_1250_1499_2016, na.rm = TRUE),
+rent_1500_1999_2016 = sum(rent_1500_1999_2016, na.rm = TRUE),
+rent_2000_2499_2016 = sum(rent_2000_2499_2016, na.rm = TRUE),
+rent_2500_2999_2016 = sum(rent_2500_2999_2016, na.rm = TRUE),
+rent_3000_3499_2016 = sum(rent_3000_3499_2016, na.rm = TRUE),
+rent_3500_plus_2016 = sum(rent_3500_plus_2016, na.rm = TRUE),
+households_cash_rent_2016 = sum(households_cash_rent_2016, na.rm = TRUE),
+households_no_cash_rent_2016 = sum(households_no_cash_rent_2016, na.rm = TRUE),
+
+
+    # Race & Ethnicity
+    white_NH_race_2016 = sum(white_NH_race_2016, na.rm = TRUE),
+    black_NH_race_2016 = sum(black_NH_race_2016, na.rm = TRUE),
+    asian_NH_race_2016 = sum(asian_NH_race_2016, na.rm = TRUE),
+    hisp_race_2016 = sum(hisp_race_2016, na.rm = TRUE),
+
+    # Transportation & Mobility
+    public_transit_users_2016 = sum(public_transit_users_2016, na.rm = TRUE),
+    mean_commute_time_2016 = mean(mean_commute_time_2016, na.rm = TRUE),
+    no_vehicle_households_2016 = sum(no_vehicle_households_2016, na.rm = TRUE),
+    commute_alone_2016 = sum(commute_alone_2016, na.rm = TRUE)
+  ) %>%
+  ungroup()  # Always ungroup after summarizing
+
+# View the final dataset
+print(newark_nbd_wide_2016)
+
+
+
+# Aggregate data by Neighborhood
+newark_nbd_wide_2015 <- newark_tract_wide_2015 %>%
+  group_by(Neighborhood) %>%
+  summarize(
+    # Population and Demographics
+    total_population_2015 = sum(total_population_2015, na.rm = TRUE),
+    total_male_population_2015 = sum(total_male_population_2015, na.rm = TRUE),
+    total_female_population_2015 = sum(total_female_population_2015, na.rm = TRUE),
+    median_age_2015 = mean(median_age_2015, na.rm = TRUE),
+    male_median_age_2015 = mean(male_median_age_2015, na.rm = TRUE),
+    female_median_age_2015 = mean(female_median_age_2015, na.rm = TRUE),
+    recent_movers_2015 = sum(recent_movers_2015, na.rm = TRUE),
+    foreign_born_population_2015 = sum(foreign_born_population_2015, na.rm = TRUE),
+
+    # Business and Economy
+    self_employed_incorporated_2015 = sum(self_employed_incorporated_2015, na.rm = TRUE),
+    self_employed_not_incorporated_2015 = sum(self_employed_not_incorporated_2015, na.rm = TRUE),
+    employment_industry_2015 = sum(employment_industry_2015, na.rm = TRUE),
+    worker_class_2015 = sum(worker_class_2015, na.rm = TRUE),
+    median_hh_income_2015 = mean(median_hh_income_2015, na.rm = TRUE),
+    per_capita_income_2015 = mean(per_capita_income_2015, na.rm = TRUE),
+    gini_index_2015 = mean(gini_index_2015, na.rm = TRUE),
+    poverty_level_2015 = sum(poverty_level_2015, na.rm = TRUE),
+
+    # Education
+    bachelor_degree_or_higher_2015 = sum(bachelor_degree_or_higher_2015, na.rm = TRUE),
+    bachelor_male_2015 = sum(bachelor_male_2015, na.rm = TRUE),
+    masters_male_2015 = sum(masters_male_2015, na.rm = TRUE),
+    doctorate_male_2015 = sum(doctorate_male_2015, na.rm = TRUE),
+    bachelor_female_2015 = sum(bachelor_female_2015, na.rm = TRUE),
+    masters_female_2015 = sum(masters_female_2015, na.rm = TRUE),
+    doctorate_female_2015 = sum(doctorate_female_2015, na.rm = TRUE),
+    professional_degree_male_2015 = sum(professional_degree_male_2015, na.rm = TRUE),
+    professional_degree_female_2015 = sum(professional_degree_female_2015, na.rm = TRUE),
+    educational_attainment_total_2015 = sum(educational_attainment_total_2015, na.rm = TRUE),
+    highschool_dropout_2015 = sum(highschool_dropout_2015, na.rm = TRUE),
+
+    # Employment
+    total_labor_force_2015 = sum(total_labor_force_2015, na.rm = TRUE),
+    total_employed_2015 = sum(total_employed_2015, na.rm = TRUE),
+    total_unemployed_2015 = sum(total_unemployed_2015, na.rm = TRUE),
+    remote_workers_2015 = sum(remote_workers_2015, na.rm = TRUE),
+    service_industry_2015 = sum(service_industry_2015, na.rm = TRUE),
+    mgmt_business_sc_arts_industry_2015 = sum(mgmt_business_sc_arts_industry_2015, na.rm = TRUE),
+
+    # Families and Living Arrangements
+    total_households_2015 = sum(total_households_2015, na.rm = TRUE),
+    family_households_2015 = sum(family_households_2015, na.rm = TRUE),
+    nonfamily_households_2015 = sum(nonfamily_households_2015, na.rm = TRUE),
+    households_with_children_2015 = sum(households_with_children_2015, na.rm = TRUE),
+
+    # Health
+    disabled_population_2015 = sum(disabled_population_2015, na.rm = TRUE),
+
+    # Housing
+    total_housing_units_2015 = sum(total_housing_units_2015, na.rm = TRUE),
+    median_gross_rent_2015 = mean(median_gross_rent_2015, na.rm = TRUE),
+    median_home_value_2015 = mean(median_home_value_2015, na.rm = TRUE),
+    rent_burden_30plus_2015 = sum(rent_burden_30plus_2015, na.rm = TRUE),
+    rent_burden_50plus_2015 = sum(rent_burden_50plus_2015, na.rm = TRUE),
+    owner_occupied_units_2015 = sum(owner_occupied_units_2015, na.rm = TRUE),
+    renter_occupied_units_2015 = sum(renter_occupied_units_2015, na.rm = TRUE),
+    total_occupied_units_2015 = sum(total_occupied_units_2015, na.rm = TRUE),
+    total_vacant_units_2015 = sum(total_vacant_units_2015, na.rm = TRUE),
+    units_built_2020plus_2015 = sum(units_built_2020plus_2015, na.rm = TRUE),
+overcrowded_owner_occupied_households_2015 = sum(overcrowded_owner_occupied_households_2015, na.rm = TRUE),
+housing_before_1939_2015 = sum(housing_before_1939_2015, na.rm = TRUE),
+households_receiving_assistance_2015 = sum(households_receiving_assistance_2015, na.rm = TRUE),
+rent_100_below_2015 = sum(rent_100_below_2015, na.rm = TRUE),
+rent_100_149_2015 = sum(rent_100_149_2015, na.rm = TRUE),
+rent_150_199_2015 = sum(rent_150_199_2015, na.rm = TRUE),
+rent_200_249_2015 = sum(rent_200_249_2015, na.rm = TRUE),
+rent_250_299_2015 = sum(rent_250_299_2015, na.rm = TRUE),
+rent_300_349_2015 = sum(rent_300_349_2015, na.rm = TRUE),
+rent_350_399_2015 = sum(rent_350_399_2015, na.rm = TRUE),
+rent_400_449_2015 = sum(rent_400_449_2015, na.rm = TRUE),
+rent_450_499_2015 = sum(rent_450_499_2015, na.rm = TRUE),
+rent_500_549_2015 = sum(rent_500_549_2015, na.rm = TRUE),
+rent_550_599_2015 = sum(rent_550_599_2015, na.rm = TRUE),
+rent_600_649_2015 = sum(rent_600_649_2015, na.rm = TRUE),
+rent_650_699_2015 = sum(rent_650_699_2015, na.rm = TRUE),
+rent_700_749_2015 = sum(rent_700_749_2015, na.rm = TRUE),
+rent_750_799_2015 = sum(rent_750_799_2015, na.rm = TRUE),
+rent_800_899_2015 = sum(rent_800_899_2015, na.rm = TRUE),
+rent_900_999_2015 = sum(rent_900_999_2015, na.rm = TRUE),
+rent_1000_1249_2015 = sum(rent_1000_1249_2015, na.rm = TRUE),
+rent_1250_1499_2015 = sum(rent_1250_1499_2015, na.rm = TRUE),
+rent_1500_1999_2015 = sum(rent_1500_1999_2015, na.rm = TRUE),
+rent_2000_2499_2015 = sum(rent_2000_2499_2015, na.rm = TRUE),
+rent_2500_2999_2015 = sum(rent_2500_2999_2015, na.rm = TRUE),
+rent_3000_3499_2015 = sum(rent_3000_3499_2015, na.rm = TRUE),
+rent_3500_plus_2015 = sum(rent_3500_plus_2015, na.rm = TRUE),
+households_cash_rent_2015 = sum(households_cash_rent_2015, na.rm = TRUE),
+households_no_cash_rent_2015 = sum(households_no_cash_rent_2015, na.rm = TRUE),
+
+
+    # Race & Ethnicity
+    white_NH_race_2015 = sum(white_NH_race_2015, na.rm = TRUE),
+    black_NH_race_2015 = sum(black_NH_race_2015, na.rm = TRUE),
+    asian_NH_race_2015 = sum(asian_NH_race_2015, na.rm = TRUE),
+    hisp_race_2015 = sum(hisp_race_2015, na.rm = TRUE),
+
+    # Transportation & Mobility
+    public_transit_users_2015 = sum(public_transit_users_2015, na.rm = TRUE),
+    mean_commute_time_2015 = mean(mean_commute_time_2015, na.rm = TRUE),
+    no_vehicle_households_2015 = sum(no_vehicle_households_2015, na.rm = TRUE),
+    commute_alone_2015 = sum(commute_alone_2015, na.rm = TRUE)
+  ) %>%
+  ungroup()  # Always ungroup after summarizing
+
+# View the final dataset
+print(newark_nbd_wide_2015)
+```
+```{r}
+
+# Download the boundary of Newark city using places (for cities in NJ)
+newark_city_sf <- places(state = "NJ", cb = TRUE) %>%
+  filter(NAME == "Newark")  # Filter to only Newark city
+
+# Download census tracts for Essex County (includes Newark city)
+newark_tracts_sf_new <- get_acs(geography = "tract",
+                                state = "NJ",
+                                county = "Essex",
+                                variables = "B01001_001",  # Total population
+                                geometry = TRUE)
+
+# Ensure both datasets (tracts and Newark city) are in the same CRS
+newark_tracts_sf_new <- st_transform(newark_tracts_sf_new, st_crs(newark_city_sf))
+
+# Filter tracts to keep only those within Newark city
+newark_tracts_sf_new <- st_intersection(newark_tracts_sf_new, newark_city_sf)
+
+# Ensure both datasets are in the same CRS
+newark_nbd_sf <- st_transform(newark_nbd_sf, st_crs(newark_tracts_sf_new))
+
+# Plot Census Tracts for Newark city
+ggplot() + 
+  geom_sf(data = newark_tracts_sf_new, fill = NA, color = "blue", lwd = 0.5) + 
+  labs(title = "Census Tracts in Newark", 
+       subtitle = "Blue: Census Tracts") + 
+  theme_minimal()
+
+# Plot Neighborhoods for Newark city
+ggplot() + 
+  geom_sf(data = newark_nbd_sf, fill = NA, color = "red", lwd = 1) + 
+  labs(title = "Neighborhoods in Newark", 
+       subtitle = "Red: Neighborhoods") + 
+  theme_minimal()
+
+# Plot Wards for Newark city
+ggplot() + 
+  geom_sf(data = newark_ward_sf, fill = NA, color = "green", lwd = 1) + 
+  labs(title = "Wards in Newark", 
+       subtitle = "Green: Wards") + 
+  theme_minimal()
+
+# Plot both Census Tracts and Neighborhoods for Newark city
+ggplot() + 
+  geom_sf(data = newark_tracts_sf_new, fill = NA, color = "blue", lwd = 0.5) +  # Census tracts in blue
+  geom_sf(data = newark_nbd_sf, fill = NA, color = "red", lwd = 1) +  # Neighborhoods in red
+  geom_sf(data = newark_ward_sf, fill = NA, color = "green", lwd = 1.3) +  # Wards in green
+  labs(title = "Census Tracts, Neighborhoods and Wards in Newark", 
+       subtitle = "Blue: Census Tracts | Red: Neighborhoods | Green: Wards") + 
+  theme_minimal()
+
+
+
+```
+
+
+
+
+
+
+
