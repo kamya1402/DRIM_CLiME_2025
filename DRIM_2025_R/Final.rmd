@@ -29,7 +29,6 @@ output:
 ```{r read, clean, merge data, warning=FALSE, message=FALSE, results='hide'}
 
 # Load libraries
-install.packages("plotly")
 library(readxl)
 library(readr)
 library(dplyr)
@@ -4360,7 +4359,7 @@ selected_variables_2023 <- c(
   "poverty_level_2023", "gini_index_2023", "highschool_dropout_2023", 
   "foreign_born_population_2023", "hisp_race_2023", "self_employed_not_incorporated_2023",
   "total_population_2023", "median_age_2023", "households_receiving_assistance_2023",
-  "nonfamily_households_2023", "family_households_2023",
+  "nonfamily_households_2023", "family_households_2023", # maybe use one variable for income and one for rent to avoid model bias
   
   # Market Dynamics
   "affordable_rents_2023", "high_rents_2023", "occupancy_permits_2023",
@@ -4371,7 +4370,7 @@ selected_variables_2023 <- c(
   "owner_occupied_units_2023", "renter_occupied_units_2023","owner_occupied_pct_2023", "non_hispanic_white_2023", 
   "bachelor_degree_or_higher_2023", "employment_industry_2023", 
   "female_median_age_2023", "male_median_age_2023", "remote_workers_2023",
-  "service_industry_2023", "mgmt_business_sc_arts_industry_2023",
+  "service_industry_2023", "mgmt_business_sc_arts_industry_2023", # just use median age, not male female maybe # maybe can use commute_alone here too
   
   # Race & Ethnicity
   "white_NH_race_2023", "black_NH_race_2023", "asian_NH_race_2023", "hisp_race_2023"

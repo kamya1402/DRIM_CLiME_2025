@@ -11,7 +11,7 @@ output:
     theme: journal  
 ---
 
-```{r Knitting Parameters, include=FALSE}
+```{r knitting parameters, include=FALSE}
 
 # Knitting Parameters
 
@@ -26,7 +26,7 @@ output:
 
 
 
-```{r read, clean, merge data, warning=FALSE, message=FALSE, results='hide'}
+```{r set up, warning=FALSE, message=FALSE, results='hide'}
 
 # Load libraries
 library(readxl)
@@ -115,7 +115,7 @@ plotTheme <- function(base_size = 12) {
 ```
 
 
-``` {r Base Data, message=FALSE, warning=FALSE, message=FALSE, results='hide'}
+``` {r base data, message=FALSE, warning=FALSE, message=FALSE, results='hide'}
 
 # Load census data
 acs_2023 <- load_variables(year = 2023, dataset = "acs5", cache = TRUE) #this is 2023 5-year acs
@@ -2419,7 +2419,7 @@ head(newark_tract_wide_2010)
 
 ```
 
-```{r}
+```{r trial plots variables, warning=FALSE, message=FALSE, results='hide'}
 
 
 # Define years and datasets
@@ -2459,8 +2459,6 @@ duplicated_geoids <- population_data_clean %>%
 
 print(duplicated_geoids)  # If empty, issue is resolved
 
-# View final cleaned dataset
-head(population_data_clean)
 
 
 # Compute population change from 2010 to 2023
@@ -2490,8 +2488,6 @@ ggplot(newark_map) +
 # file path to the SHP file
 newark_nbd_sf <- st_read("Newark_Neighborhoods.shp")
 
-# Check the first few rows
-head(newark_nbd_sf)
 
 newark_tracts_sf <- newark_tracts %>%
   st_as_sf(coords = c("INTPTLON", "INTPTLAT"), crs = 4326) # Convert to spatial using tract centroids
@@ -2499,9 +2495,6 @@ newark_tracts_sf <- newark_tracts %>%
 st_crs(newark_tracts_sf)
 st_crs(newark_nbd_sf)
 
-# Check CRS of both datasets
-print(st_crs(newark_tracts_sf))
-print(st_crs(newark_nbd_sf))
 
 # Transform newark_tracts_sf to match the neighborhood CRS
 newark_tracts_sf <- st_transform(newark_tracts_sf, st_crs(newark_nbd_sf))
@@ -2516,15 +2509,6 @@ newark_tracts_with_nbd <- newark_tracts_with_nbd %>%
 # Rename for clarity
 colnames(newark_tracts_with_nbd) <- c("GEOID", "Census_Tract", "Neighborhood", "geometry")
 
-
-
-
-
-
-
-```
-
-```{r}
 
 # List of years
 years <- 2010:2023
@@ -2610,10 +2594,6 @@ ggplot(pop_data_long, aes(x = factor(year), y = population, fill = race)) +
   )
 
 
-```
-
-```{r}
-
 # Define the range of years
 years <- 2010:2023
 
@@ -2664,11 +2644,8 @@ ggplot(income_long, aes(x = year, y = median_income)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         text = element_text(size = 14))
 
-```
-```{r}
 
-
-### **Step 1: Merge Census Tract Data with Household Income Data** ###
+### Merge Census Tract Data with Household Income Data** ###
 # Drop geometry from census tracts dataset and select required columns
 newark_tracts_no_geom <- newark_tracts_with_nbd %>%
   st_drop_geometry() %>%
@@ -2686,7 +2663,7 @@ income_nbd_data <- median_hh_income_data %>%
 # View data to confirm the merge worked correctly
 head(income_nbd_data)
 
-### **Step 2: Aggregate Census Tract Data to Neighborhood Level** ###
+### Aggregate Census Tract Data to Neighborhood Level** ###
 income_nbd_agg <- income_nbd_data %>%
   group_by(Neighborhood, year) %>%
   summarise(
@@ -2707,7 +2684,7 @@ newark_nbd_sf <- newark_nbd_sf %>%
 st_crs(newark_nbd_sf)  # Check CRS of neighborhood polygons
 st_crs(income_nbd_agg)  # Should be NA since it's not spatial
 
-### **Step 4: Convert Aggregated Data to SF Object & Ensure Matching CRS** ###
+### Convert Aggregated Data to SF Object & Ensure Matching CRS** ###
 # Convert income data into an sf object
 income_nbd_agg_sf <- st_as_sf(income_nbd_agg, coords = NULL, crs = st_crs(newark_nbd_sf))
 
@@ -2744,14 +2721,12 @@ income_summary <- income_nbd_sf %>%
 print(income_summary)
 
 
-
-
-
 ```
 
 
 
-```{r}
+
+```{r nbd aggregate data, warning=FALSE, message=FALSE, results='hide'}
 
 # Ensure all spatial datasets have the same CRS as newark_nbd_sf
 target_crs <- st_crs(newark_nbd_sf)  # Get CRS from neighborhood data
@@ -2777,23 +2752,23 @@ newark_nbd_sf <- st_transform(newark_nbd_sf, target_crs)
 newark_tracts_with_nbd <- st_transform(newark_tracts_with_nbd, target_crs)
 newark_ward_sf <- st_transform(newark_ward_sf, target_crs)
 
-# 1️⃣ Remove geometry column from newark_tract_wide_2023
+# Remove geometry column from newark_tract_wide_2023
 newark_tract_wide_2023 <- newark_tract_wide_2023 %>%
   st_drop_geometry()
 
-# 2️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2023)
 
-# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+# Rename column 'NAME' to 'Census_Tract'
 newark_tract_wide_2023 <- newark_tract_wide_2023 %>%
   rename(Census_Tract = NAME)
 
-# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+# Join only the "Neighborhood" column from newark_tracts_with_nbd
 newark_tract_wide_2023 <- newark_tract_wide_2023 %>%
   left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
             by = "Census_Tract")
 
-# 3️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2023)
 
 # Rename columns: Remove "2023_" prefix and add "_2023" suffix
@@ -2802,23 +2777,23 @@ colnames(newark_tract_wide_2023) <- paste0(colnames(newark_tract_wide_2023), "_2
 colnames(newark_tract_wide_2023)[colnames(newark_tract_wide_2023) %in% c("GEOID_2023", "Census_Tract_2023", "Neighborhood_2023", "geometry_2023")] <- 
   c("GEOID", "Census_Tract", "Neighborhood", "geometry")
 
-# 1️⃣ Remove geometry column from newark_tract_wide_2022
+# Remove geometry column from newark_tract_wide_2022
 newark_tract_wide_2022 <- newark_tract_wide_2022 %>%
   st_drop_geometry()
 
-# 2️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2022)
 
-# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+# Rename column 'NAME' to 'Census_Tract'
 newark_tract_wide_2022 <- newark_tract_wide_2022 %>%
   rename(Census_Tract = NAME)
 
-# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+# Join only the "Neighborhood" column from newark_tracts_with_nbd
 newark_tract_wide_2022 <- newark_tract_wide_2022 %>%
   left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
             by = "Census_Tract")
 
-# 3️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2022)
 
 # Rename columns: Remove "2022_" prefix and add "_2022" suffix
@@ -2828,23 +2803,23 @@ colnames(newark_tract_wide_2022)[colnames(newark_tract_wide_2022) %in% c("GEOID_
   c("GEOID", "Census_Tract", "Neighborhood", "geometry")
 
 
-# 1️⃣ Remove geometry column from newark_tract_wide_2021
+# Remove geometry column from newark_tract_wide_2021
 newark_tract_wide_2021 <- newark_tract_wide_2021 %>%
   st_drop_geometry()
 
-# 2️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2021)
 
-# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+# Rename column 'NAME' to 'Census_Tract'
 newark_tract_wide_2021 <- newark_tract_wide_2021 %>%
   rename(Census_Tract = NAME)
 
-# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+# Join only the "Neighborhood" column from newark_tracts_with_nbd
 newark_tract_wide_2021 <- newark_tract_wide_2021 %>%
   left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
             by = "Census_Tract")
 
-# 3️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2021)
 
 # Rename columns: Remove "2021_" prefix and add "_2021" suffix
@@ -2854,23 +2829,23 @@ colnames(newark_tract_wide_2021)[colnames(newark_tract_wide_2021) %in% c("GEOID_
   c("GEOID", "Census_Tract", "Neighborhood", "geometry")
 
 
-# 1️⃣ Remove geometry column from newark_tract_wide_2020
+# Remove geometry column from newark_tract_wide_2020
 newark_tract_wide_2020 <- newark_tract_wide_2020 %>%
   st_drop_geometry()
 
-# 2️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2020)
 
-# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+# Rename column 'NAME' to 'Census_Tract'
 newark_tract_wide_2020 <- newark_tract_wide_2020 %>%
   rename(Census_Tract = NAME)
 
-# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+# Join only the "Neighborhood" column from newark_tracts_with_nbd
 newark_tract_wide_2020 <- newark_tract_wide_2020 %>%
   left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
             by = "Census_Tract")
 
-# 3️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2020)
 
 # Rename columns: Remove "2020_" prefix and add "_2020" suffix
@@ -2880,23 +2855,23 @@ colnames(newark_tract_wide_2020)[colnames(newark_tract_wide_2020) %in% c("GEOID_
   c("GEOID", "Census_Tract", "Neighborhood", "geometry")
 
 
-# 1️⃣ Remove geometry column from newark_tract_wide_2019
+# Remove geometry column from newark_tract_wide_2019
 newark_tract_wide_2019 <- newark_tract_wide_2019 %>%
   st_drop_geometry()
 
-# 2️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2019)
 
-# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+# Rename column 'NAME' to 'Census_Tract'
 newark_tract_wide_2019 <- newark_tract_wide_2019 %>%
   rename(Census_Tract = NAME)
 
-# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+# Join only the "Neighborhood" column from newark_tracts_with_nbd
 newark_tract_wide_2019 <- newark_tract_wide_2019 %>%
   left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
             by = "Census_Tract")
 
-# 3️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2019)
 
 # Rename columns: Remove "2019_" prefix and add "_2019" suffix
@@ -2907,23 +2882,23 @@ colnames(newark_tract_wide_2019)[colnames(newark_tract_wide_2019) %in% c("GEOID_
 
 
 
-# 1️⃣ Remove geometry column from newark_tract_wide_2018
+# Remove geometry column from newark_tract_wide_2018
 newark_tract_wide_2018 <- newark_tract_wide_2018 %>%
   st_drop_geometry()
 
-# 2️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2018)
 
-# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+# Rename column 'NAME' to 'Census_Tract'
 newark_tract_wide_2018 <- newark_tract_wide_2018 %>%
   rename(Census_Tract = NAME)
 
-# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+# Join only the "Neighborhood" column from newark_tracts_with_nbd
 newark_tract_wide_2018 <- newark_tract_wide_2018 %>%
   left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
             by = "Census_Tract")
 
-# 3️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2018)
 
 # Rename columns: Remove "2018_" prefix and add "_2018" suffix
@@ -2933,23 +2908,23 @@ colnames(newark_tract_wide_2018)[colnames(newark_tract_wide_2018) %in% c("GEOID_
   c("GEOID", "Census_Tract", "Neighborhood", "geometry")
 
 
-# 1️⃣ Remove geometry column from newark_tract_wide_2017
+# Remove geometry column from newark_tract_wide_2017
 newark_tract_wide_2017 <- newark_tract_wide_2017 %>%
   st_drop_geometry()
 
-# 2️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2017)
 
-# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+# Rename column 'NAME' to 'Census_Tract'
 newark_tract_wide_2017 <- newark_tract_wide_2017 %>%
   rename(Census_Tract = NAME)
 
-# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+# Join only the "Neighborhood" column from newark_tracts_with_nbd
 newark_tract_wide_2017 <- newark_tract_wide_2017 %>%
   left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
             by = "Census_Tract")
 
-# 3️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2017)
 
 # Rename columns: Remove "2017_" prefix and add "_2017" suffix
@@ -2959,23 +2934,23 @@ colnames(newark_tract_wide_2017)[colnames(newark_tract_wide_2017) %in% c("GEOID_
   c("GEOID", "Census_Tract", "Neighborhood", "geometry")
 
 
-# 1️⃣ Remove geometry column from newark_tract_wide_2016
+# Remove geometry column from newark_tract_wide_2016
 newark_tract_wide_2016 <- newark_tract_wide_2016 %>%
   st_drop_geometry()
 
-# 2️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2016)
 
-# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+# Rename column 'NAME' to 'Census_Tract'
 newark_tract_wide_2016 <- newark_tract_wide_2016 %>%
   rename(Census_Tract = NAME)
 
-# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+# Join only the "Neighborhood" column from newark_tracts_with_nbd
 newark_tract_wide_2016 <- newark_tract_wide_2016 %>%
   left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
             by = "Census_Tract")
 
-# 3️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2016)
 
 # Rename columns: Remove "2016_" prefix and add "_2016" suffix
@@ -2986,23 +2961,23 @@ colnames(newark_tract_wide_2016)[colnames(newark_tract_wide_2016) %in% c("GEOID_
 
 
 
-# 1️⃣ Remove geometry column from newark_tract_wide_2015
+# Remove geometry column from newark_tract_wide_2015
 newark_tract_wide_2015 <- newark_tract_wide_2015 %>%
   st_drop_geometry()
 
-# 2️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2015)
 
-# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+# Rename column 'NAME' to 'Census_Tract'
 newark_tract_wide_2015 <- newark_tract_wide_2015 %>%
   rename(Census_Tract = NAME)
 
-# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+# Join only the "Neighborhood" column from newark_tracts_with_nbd
 newark_tract_wide_2015 <- newark_tract_wide_2015 %>%
   left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
             by = "Census_Tract")
 
-# 3️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2015)
 
 # Rename columns: Remove "2015_" prefix and add "_2015" suffix
@@ -3013,23 +2988,23 @@ colnames(newark_tract_wide_2015)[colnames(newark_tract_wide_2015) %in% c("GEOID_
 
 
 
-# 1️⃣ Remove geometry column from newark_tract_wide_2014
+# Remove geometry column from newark_tract_wide_2014
 newark_tract_wide_2014 <- newark_tract_wide_2014 %>%
   st_drop_geometry()
 
-# 2️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2014)
 
-# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+# Rename column 'NAME' to 'Census_Tract'
 newark_tract_wide_2014 <- newark_tract_wide_2014 %>%
   rename(Census_Tract = NAME)
 
-# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+# Join only the "Neighborhood" column from newark_tracts_with_nbd
 newark_tract_wide_2014 <- newark_tract_wide_2014 %>%
   left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
             by = "Census_Tract")
 
-# 3️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2014)
 
 # Rename columns: Remove "2014_" prefix and add "_2014" suffix
@@ -3041,23 +3016,23 @@ colnames(newark_tract_wide_2014)[colnames(newark_tract_wide_2014) %in% c("GEOID_
 
 
 
-# 1️⃣ Remove geometry column from newark_tract_wide_2013
+# Remove geometry column from newark_tract_wide_2013
 newark_tract_wide_2013 <- newark_tract_wide_2013 %>%
   st_drop_geometry()
 
-# 2️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2013)
 
-# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+# Rename column 'NAME' to 'Census_Tract'
 newark_tract_wide_2013 <- newark_tract_wide_2013 %>%
   rename(Census_Tract = NAME)
 
-# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+# Join only the "Neighborhood" column from newark_tracts_with_nbd
 newark_tract_wide_2013 <- newark_tract_wide_2013 %>%
   left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
             by = "Census_Tract")
 
-# 3️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2013)
 
 # Rename columns: Remove "2013_" prefix and add "_2013" suffix
@@ -3068,23 +3043,23 @@ colnames(newark_tract_wide_2013)[colnames(newark_tract_wide_2013) %in% c("GEOID_
 
 
 
-# 1️⃣ Remove geometry column from newark_tract_wide_2012
+# Remove geometry column from newark_tract_wide_2012
 newark_tract_wide_2012 <- newark_tract_wide_2012 %>%
   st_drop_geometry()
 
-# 2️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2012)
 
-# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+# Rename column 'NAME' to 'Census_Tract'
 newark_tract_wide_2012 <- newark_tract_wide_2012 %>%
   rename(Census_Tract = NAME)
 
-# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+# Join only the "Neighborhood" column from newark_tracts_with_nbd
 newark_tract_wide_2012 <- newark_tract_wide_2012 %>%
   left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
             by = "Census_Tract")
 
-# 3️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2012)
 
 # Rename columns: Remove "2012_" prefix and add "_2012" suffix
@@ -3096,23 +3071,23 @@ colnames(newark_tract_wide_2012)[colnames(newark_tract_wide_2012) %in% c("GEOID_
 
 
 
-# 1️⃣ Remove geometry column from newark_tract_wide_2011
+# Remove geometry column from newark_tract_wide_2011
 newark_tract_wide_2011 <- newark_tract_wide_2011 %>%
   st_drop_geometry()
 
-# 2️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2011)
 
-# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+# Rename column 'NAME' to 'Census_Tract'
 newark_tract_wide_2011 <- newark_tract_wide_2011 %>%
   rename(Census_Tract = NAME)
 
-# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+# Join only the "Neighborhood" column from newark_tracts_with_nbd
 newark_tract_wide_2011 <- newark_tract_wide_2011 %>%
   left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
             by = "Census_Tract")
 
-# 3️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2011)
 
 # Rename columns: Remove "2011_" prefix and add "_2011" suffix
@@ -3125,23 +3100,23 @@ colnames(newark_tract_wide_2011)[colnames(newark_tract_wide_2011) %in% c("GEOID_
 
 
 
-# 1️⃣ Remove geometry column from newark_tract_wide_2010
+# Remove geometry column from newark_tract_wide_2010
 newark_tract_wide_2010 <- newark_tract_wide_2010 %>%
   st_drop_geometry()
 
-# 2️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2010)
 
-# 1️⃣ Rename column 'NAME' to 'Census_Tract'
+# Rename column 'NAME' to 'Census_Tract'
 newark_tract_wide_2010 <- newark_tract_wide_2010 %>%
   rename(Census_Tract = NAME)
 
-# 2️⃣ Join only the "Neighborhood" column from newark_tracts_with_nbd
+# Join only the "Neighborhood" column from newark_tracts_with_nbd
 newark_tract_wide_2010 <- newark_tract_wide_2010 %>%
   left_join(newark_tracts_with_nbd %>% select(Census_Tract, Neighborhood), 
             by = "Census_Tract")
 
-# 3️⃣ View the updated DataFrame
+# View the updated DataFrame
 print(newark_tract_wide_2010)
 
 # Rename columns: Remove "2010_" prefix and add "_2010" suffix
@@ -4223,7 +4198,7 @@ print(newark_nbd_wide_2015)
 
 
 ```
-```{r}
+```{r trial plots geometry, warning=FALSE, message=FALSE, results='hide'}
 
 # Download the boundary of Newark city using places (for cities in NJ)
 newark_city_sf <- places(state = "NJ", cb = TRUE) %>%
@@ -4279,7 +4254,7 @@ ggplot() +
 
 ```
 
-```{r}
+```{r large correlation matrix, warning=FALSE, message=FALSE, results='hide'}
 
 # Set large figure size
 options(repr.plot.width = 14, repr.plot.height = 14)
@@ -4349,7 +4324,7 @@ print(weak_corr)
 
 ```
 
-```{r}
+```{r nbd selected variables, warning=FALSE, message=FALSE, results='hide'}
 
 # List of selected variables with 2023 data
 selected_variables_2023 <- c(
@@ -4616,7 +4591,7 @@ newark_nbd_wide_selected_2015 <- newark_nbd_wide_2015 %>%
 
 ```
 
-```{r}
+```{r nbd datasets, warning=FALSE, message=FALSE, results='hide'}
 
 # Merge all years into one dataset with Neighborhood as the key
 nbd_rent_burden_50plus <- full_join(newark_nbd_wide_selected_2015 %>% select(Neighborhood, rent_burden_50plus_2015),
@@ -4961,7 +4936,7 @@ nbd_asian_NH_race <- full_join(
 ```
 
 
-```{r}
+```{r nbd plots, warning=FALSE, message=FALSE, results='hide'}
 
 #Median Age
 # Reshape the wide-format dataset to long format
@@ -5559,7 +5534,7 @@ ggplot(asian_NH_race_long, aes(x = Year, y = Asian_NH_Race, color = Neighborhood
 ```
 
 
-```{r}
+```{r ward aggregate data, warning=FALSE, message=FALSE, results='hide'}
 
 newark_tracts_sf_new <- st_transform(newark_tracts_sf_new, st_crs(newark_ward_sf))
 newark_ward_sf <- st_transform(newark_ward_sf, st_crs(newark_tracts_sf_new))
@@ -5672,7 +5647,7 @@ newark_tract_wide_2015 <- newark_tract_wide_2015 %>%
 
 ```
 
-```{r}
+```{r ward datsets, warning=FALSE, message=FALSE, results='hide'}
 
 # Aggregate data by Ward
 newark_ward_wide_2023 <- newark_tract_wide_2023 %>%
@@ -6709,7 +6684,7 @@ households_no_cash_rent_2015 = sum(households_no_cash_rent_2015, na.rm = TRUE),
 print(newark_ward_wide_2015)
 
 ```
-```{r}
+```{r ward selected variables, warning=FALSE, message=FALSE, results='hide'}
 
 # List of selected variables with 2023 data
 selected_variables_2023 <- c(
@@ -6976,7 +6951,7 @@ newark_ward_wide_selected_2015 <- newark_ward_wide_2015 %>%
 ```
 
 
-```{r}
+```{r ward datasets, warning=FALSE, message=FALSE, results='hide'}
 
 # Merge all years into one dataset with Ward as the key
 ward_rent_burden_50plus <- full_join(newark_ward_wide_selected_2015 %>% select(Ward, rent_burden_50plus_2015),
@@ -7344,7 +7319,7 @@ ward_asian_NH_race <- full_join(
 
 ```
 
-```{r}
+```{r ward plots, warning=FALSE, message=FALSE, results='hide'}
 
 # Median Age
 # Reshape the wide-format dataset to long format
